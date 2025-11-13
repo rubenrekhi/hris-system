@@ -7,6 +7,7 @@ Defines all dependency injections for the API.
 from fastapi import Depends
 from sqlalchemy.orm import Session
 from core.database import SessionLocal
+from services.AuditLogService import AuditLogService
 
 
 # Temporary mock user class until auth is implemented
@@ -61,5 +62,16 @@ def require_roles(*allowed_roles: str):
         return user
 
     return dep
+
+
+# --------------------------------------------------------------------
+# Dependency: get_audit_log_service()
+# --------------------------------------------------------------------
+def get_audit_log_service(db: Session = Depends(get_db)) -> AuditLogService:
+    """
+    FastAPI dependency — returns an AuditLogService instance for the current request.
+    The service is initialized with the database session.
+    """
+    return AuditLogService(db)
 
 
