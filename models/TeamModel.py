@@ -24,4 +24,4 @@ class Team(BaseModel):
     department = relationship("Department", back_populates="teams")
     lead = relationship("Employee", foreign_keys=[lead_id])
     parent_team = relationship("Team", remote_side="Team.id")
-    members = relationship("Employee", back_populates="team")
+    members = relationship("Employee", back_populates="team", foreign_keys="Employee.team_id")
