@@ -26,6 +26,185 @@ class EmployeeService:
         self.db = db
         self.audit_service = audit_service or AuditLogService(db)
 
+    # ============================================================================
+    # Private Helper Methods
+    # ============================================================================
+
+    def _validate_manager_exists(self, manager_id: UUID) -> None:
+        """
+        Validate that a manager exists.
+
+        Args:
+            manager_id: UUID of the manager to validate
+
+        Raises:
+            ValueError: If manager does not exist
+        """
+        manager_query = select(Employee).where(Employee.id == manager_id)
+        manager = self.db.execute(manager_query).scalar_one_or_none()
+        if not manager:
+            raise ValueError(f"Manager with ID {manager_id} does not exist")
+
+    def _validate_department_exists(self, department_id: UUID) -> Department:
+        """
+        Validate that a department exists and return it.
+
+        Args:
+            department_id: UUID of the department to validate
+
+        Returns:
+            The Department object
+
+        Raises:
+            ValueError: If department does not exist
+        """
+        dept_query = select(Department).where(Department.id == department_id)
+        department = self.db.execute(dept_query).scalar_one_or_none()
+        if not department:
+            raise ValueError(f"Department with ID {department_id} does not exist")
+        return department
+
+    def _validate_team_exists(self, team_id: UUID) -> Team:
+        """
+        Validate that a team exists and return it.
+
+        Args:
+            team_id: UUID of the team to validate
+
+        Returns:
+            The Team object
+
+        Raises:
+            ValueError: If team does not exist
+        """
+        team_query = select(Team).where(Team.id == team_id)
+        team = self.db.execute(team_query).scalar_one_or_none()
+        if not team:
+            raise ValueError(f"Team with ID {team_id} does not exist")
+        return team
+
+    def _serialize_employee_state(self, employee: Employee) -> dict:
+        """
+        Serialize an employee to a dictionary for audit logging.
+
+        Args:
+            employee: Employee object to serialize
+
+        Returns:
+            Dictionary with employee fields serialized for audit logging
+        """
+        return {
+            "name": employee.name,
+            "title": employee.title,
+            "email": employee.email,
+            "hired_on": employee.hired_on.isoformat() if employee.hired_on else None,
+            "salary": employee.salary,
+            "status": employee.status.value if employee.status else None,
+            "department_id": str(employee.department_id) if employee.department_id else None,
+            "manager_id": str(employee.manager_id) if employee.manager_id else None,
+            "team_id": str(employee.team_id) if employee.team_id else None,
+        }
+
+    def _link_user_to_employee(
+        self,
+        employee_id: UUID,
+        email: str,
+        changed_by_user_id: Optional[UUID] = None,
+    ) -> None:
+        """
+        Link a user to an employee by email if user exists.
+
+        Creates an audit log entry if the user is found and linked.
+
+        Args:
+            employee_id: UUID of the employee to link
+            email: Email address to search for matching user
+            changed_by_user_id: UUID of user making the change
+        """
+        user_query = select(User).where(User.email == email)
+        user = self.db.execute(user_query).scalar_one_or_none()
+
+        if user:
+            # Capture user's previous state
+            user_previous_state = {
+                "employee_id": str(user.employee_id) if user.employee_id else None,
+            }
+
+            # Link user to employee
+            user.employee_id = employee_id
+
+            # Capture user's new state
+            user_new_state = {
+                "employee_id": str(user.employee_id) if user.employee_id else None,
+            }
+
+            # Create audit log for user update
+            self.audit_service.create_audit_log(
+                entity_type=EntityType.USER,
+                entity_id=user.id,
+                change_type=ChangeType.UPDATE,
+                previous_state=user_previous_state,
+                new_state=user_new_state,
+                changed_by_user_id=changed_by_user_id,
+            )
+
+    def _bulk_reassign_manager(
+        self,
+        from_manager_id: UUID,
+        to_manager_id: Optional[UUID],
+        changed_by_user_id: Optional[UUID] = None,
+        filter_condition = None,
+    ) -> None:
+        """
+        Bulk reassign employees from one manager to another.
+
+        Gets all employees with from_manager_id (optionally filtered),
+        updates them in bulk, and creates bulk audit logs.
+
+        Args:
+            from_manager_id: Current manager ID
+            to_manager_id: New manager ID (can be None)
+            changed_by_user_id: UUID of user making the change
+            filter_condition: Optional additional filter condition (e.g., Employee.id != some_id)
+        """
+        # Build query to get employee IDs
+        id_query = select(Employee.id).where(Employee.manager_id == from_manager_id)
+        if filter_condition is not None:
+            id_query = id_query.where(filter_condition)
+
+        employee_ids = list(self.db.execute(id_query).scalars().all())
+
+        # Only proceed if there are employees to reassign
+        if employee_ids:
+            # Build update statement
+            update_stmt = update(Employee).where(Employee.manager_id == from_manager_id)
+            if filter_condition is not None:
+                update_stmt = update_stmt.where(filter_condition)
+            update_stmt = update_stmt.values(manager_id=to_manager_id)
+
+            self.db.execute(update_stmt)
+
+            # Create bulk audit logs
+            previous_state = {
+                "manager_id": str(from_manager_id),
+            }
+            new_state = {
+                "manager_id": str(to_manager_id) if to_manager_id else None,
+            }
+
+            self.audit_service.bulk_create_audit_logs(
+                entity_type=EntityType.EMPLOYEE,
+                entity_ids=employee_ids,
+                change_type=ChangeType.UPDATE,
+                previous_state=previous_state,
+                new_state=new_state,
+                changed_by_user_id=changed_by_user_id,
+            )
+
+    # ============================================================================
+    # Public Methods
+    # ============================================================================
+
     def list_employees(
         self,
         *,
@@ -166,26 +345,15 @@ class EmployeeService:
         if not is_first_employee and manager_id is None:
             raise ValueError("manager_id is required for all employees except the first")
 
-        # Validate manager exists (if provided)
+        # Validate foreign keys (if provided)
         if manager_id is not None:
-            manager_query = select(Employee).where(Employee.id == manager_id)
-            manager = self.db.execute(manager_query).scalar_one_or_none()
-            if not manager:
-                raise ValueError(f"Manager with ID {manager_id} does not exist")
+            self._validate_manager_exists(manager_id)
 
-        # Validate department exists (if provided)
         if department_id is not None:
-            dept_query = select(Department).where(Department.id == department_id)
-            department = self.db.execute(dept_query).scalar_one_or_none()
-            if not department:
-                raise ValueError(f"Department with ID {department_id} does not exist")
+            self._validate_department_exists(department_id)
 
-        # Validate team exists (if provided)
         if team_id is not None:
-            team_query = select(Team).where(Team.id == team_id)
-            team = self.db.execute(team_query).scalar_one_or_none()
-            if not team:
-                raise ValueError(f"Team with ID {team_id} does not exist")
+            self._validate_team_exists(team_id)
 
         # Create new employee
         employee = Employee(
@@ -205,45 +373,10 @@ class EmployeeService:
         self.db.flush()
 
         # Check if a user with this email exists and link them
-        user_query = select(User).where(User.email == email)
-        user = self.db.execute(user_query).scalar_one_or_none()
-
-        if user:
-            # Capture user's previous state
-            user_previous_state = {
-                "employee_id": str(user.employee_id) if user.employee_id else None,
-            }
-
-            # Link user to employee
-            user.employee_id = employee.id
-
-            # Capture user's new state
-            user_new_state = {
-                "employee_id": str(user.employee_id) if user.employee_id else None,
-            }
-
-            # Create audit log for user update
-            self.audit_service.create_audit_log(
-                entity_type=EntityType.USER,
-                entity_id=user.id,
-                change_type=ChangeType.UPDATE,
-                previous_state=user_previous_state,
-                new_state=user_new_state,
-                changed_by_user_id=changed_by_user_id,
-            )
+        self._link_user_to_employee(employee.id, email, changed_by_user_id)
 
         # Capture employee state for audit log
-        employee_state = {
-            "name": employee.name,
-            "title": employee.title,
-            "email": employee.email,
-            "hired_on": employee.hired_on.isoformat() if employee.hired_on else None,
-            "salary": employee.salary,
-            "status": employee.status.value if employee.status else None,
-            "department_id": str(employee.department_id) if employee.department_id else None,
-            "manager_id": str(employee.manager_id) if employee.manager_id else None,
-            "team_id": str(employee.team_id) if employee.team_id else None,
-        }
+        employee_state = self._serialize_employee_state(employee)
 
         # Create audit log for new employee
         self.audit_service.create_audit_log(
@@ -375,11 +508,7 @@ class EmployeeService:
 
         # If department_id is not None, validate department exists
         if department_id is not None:
-            dept_query = select(Department).where(Department.id == department_id)
-            department = self.db.execute(dept_query).scalar_one_or_none()
-
-            if not department:
-                raise ValueError(f"Department with ID {department_id} does not exist")
+            self._validate_department_exists(department_id)
 
         # Capture previous state
         previous_state = {
@@ -440,12 +569,7 @@ class EmployeeService:
         # If team_id is not None, validate team exists and get team's department
         new_department_id = None
         if team_id is not None:
-            team_query = select(Team).where(Team.id == team_id)
-            team = self.db.execute(team_query).scalar_one_or_none()
-
-            if not team:
-                raise ValueError(f"Team with ID {team_id} does not exist")
-
+            team = self._validate_team_exists(team_id)
             # Get the team's department to enforce matching
             new_department_id = team.department_id
 
@@ -560,49 +684,15 @@ class EmployeeService:
         if employee.manager_id is None:
             raise ValueError("CEO cannot be deleted, only replaced")
 
-        # Get list of direct report IDs for audit logging
-        direct_report_ids_query = select(Employee.id).where(Employee.manager_id == employee_id)
-        direct_report_ids = list(self.db.execute(direct_report_ids_query).scalars().all())
-
         # If employee has direct reports, reassign them to employee's manager in bulk
-        if direct_report_ids:
-            # Bulk update all direct reports to new manager
-            update_stmt = (
-                update(Employee)
-                .where(Employee.manager_id == employee_id)
-                .values(manager_id=employee.manager_id)
-            )
-            self.db.execute(update_stmt)
-
-            # Bulk create audit logs for all reassigned employees
-            previous_state = {
-                "manager_id": str(employee_id),
-            }
-            new_state = {
-                "manager_id": str(employee.manager_id) if employee.manager_id else None,
-            }
-
-            self.audit_service.bulk_create_audit_logs(
-                entity_type=EntityType.EMPLOYEE,
-                entity_ids=direct_report_ids,
-                change_type=ChangeType.UPDATE,
-                previous_state=previous_state,
-                new_state=new_state,
-                changed_by_user_id=changed_by_user_id,
-            )
+        self._bulk_reassign_manager(
+            from_manager_id=employee_id,
+            to_manager_id=employee.manager_id,
+            changed_by_user_id=changed_by_user_id,
+        )
 
         # Capture employee state before deletion
-        deleted_employee_state = {
-            "name": employee.name,
-            "title": employee.title,
-            "email": employee.email,
-            "hired_on": employee.hired_on.isoformat() if employee.hired_on else None,
-            "salary": employee.salary,
-            "status": employee.status.value if employee.status else None,
-            "department_id": str(employee.department_id) if employee.department_id else None,
-            "manager_id": str(employee.manager_id) if employee.manager_id else None,
-            "team_id": str(employee.team_id) if employee.team_id else None,
-        }
+        deleted_employee_state = self._serialize_employee_state(employee)
 
         # Create audit log for deleted employee
         self.audit_service.create_audit_log(
@@ -663,19 +753,12 @@ class EmployeeService:
 
         current_ceo_id = current_ceo.id
 
-        # Validate department exists (if provided)
+        # Validate foreign keys (if provided)
         if department_id is not None:
-            dept_query = select(Department).where(Department.id == department_id)
-            department = self.db.execute(dept_query).scalar_one_or_none()
-            if not department:
-                raise ValueError(f"Department with ID {department_id} does not exist")
+            self._validate_department_exists(department_id)
 
-        # Validate team exists (if provided)
         if team_id is not None:
-            team_query = select(Team).where(Team.id == team_id)
-            team = self.db.execute(team_query).scalar_one_or_none()
-            if not team:
-                raise ValueError(f"Team with ID {team_id} does not exist")
+            self._validate_team_exists(team_id)
 
         # Create new CEO (no manager)
         new_ceo = Employee(
@@ -694,35 +777,12 @@ class EmployeeService:
         # Flush to get the new CEO's ID
         self.db.flush()
 
-        # Get list of old CEO's direct report IDs
-        direct_report_ids_query = select(Employee.id).where(Employee.manager_id == current_ceo_id)
-        direct_report_ids = list(self.db.execute(direct_report_ids_query).scalars().all())
-
         # Bulk update all direct reports to report to new CEO
-        if direct_report_ids:
-            update_stmt = (
-                update(Employee)
-                .where(Employee.manager_id == current_ceo_id)
-                .values(manager_id=new_ceo.id)
-            )
-            self.db.execute(update_stmt)
-
-            # Bulk create audit logs for all reassigned direct reports
-            previous_state = {
-                "manager_id": str(current_ceo_id),
-            }
-            new_state = {
-                "manager_id": str(new_ceo.id),
-            }
-
-            self.audit_service.bulk_create_audit_logs(
-                entity_type=EntityType.EMPLOYEE,
-                entity_ids=direct_report_ids,
-                change_type=ChangeType.UPDATE,
-                previous_state=previous_state,
-                new_state=new_state,
-                changed_by_user_id=changed_by_user_id,
-            )
+        self._bulk_reassign_manager(
+            from_manager_id=current_ceo_id,
+            to_manager_id=new_ceo.id,
+            changed_by_user_id=changed_by_user_id,
+        )
 
         # Update old CEO to report to new CEO
         old_ceo_previous_state = {
@@ -746,45 +806,10 @@ class EmployeeService:
         )
 
         # Check if a user with this email exists and link them to new CEO
-        user_query = select(User).where(User.email == email)
-        user = self.db.execute(user_query).scalar_one_or_none()
-
-        if user:
-            # Capture user's previous state
-            user_previous_state = {
-                "employee_id": str(user.employee_id) if user.employee_id else None,
-            }
-
-            # Link user to new CEO
-            user.employee_id = new_ceo.id
-
-            # Capture user's new state
-            user_new_state = {
-                "employee_id": str(user.employee_id) if user.employee_id else None,
-            }
-
-            # Create audit log for user update
-            self.audit_service.create_audit_log(
-                entity_type=EntityType.USER,
-                entity_id=user.id,
-                change_type=ChangeType.UPDATE,
-                previous_state=user_previous_state,
-                new_state=user_new_state,
-                changed_by_user_id=changed_by_user_id,
-            )
+        self._link_user_to_employee(new_ceo.id, email, changed_by_user_id)
 
         # Capture new CEO state for audit log
-        new_ceo_state = {
-            "name": new_ceo.name,
-            "title": new_ceo.title,
-            "email": new_ceo.email,
-            "hired_on": new_ceo.hired_on.isoformat() if new_ceo.hired_on else None,
-            "salary": new_ceo.salary,
-            "status": new_ceo.status.value if new_ceo.status else None,
-            "department_id": str(new_ceo.department_id) if new_ceo.department_id else None,
-            "manager_id": None,
-            "team_id": str(new_ceo.team_id) if new_ceo.team_id else None,
-        }
+        new_ceo_state = self._serialize_employee_state(new_ceo)
 
         # Create audit log for new CEO
         self.audit_service.create_audit_log(
@@ -853,110 +878,32 @@ class EmployeeService:
             # Employee's direct reports stay with them
             # Old CEO's other direct reports (excluding new CEO) move to new CEO
 
-            # Get IDs of old CEO's direct reports (excluding the employee being promoted)
-            old_ceo_direct_reports_query = select(Employee.id).where(
-                and_(
-                    Employee.manager_id == current_ceo_id,
-                    Employee.id != employee_id
-                )
+            # Reassign old CEO's other direct reports to new CEO (excluding the promoted employee)
+            self._bulk_reassign_manager(
+                from_manager_id=current_ceo_id,
+                to_manager_id=employee_id,
+                changed_by_user_id=changed_by_user_id,
+                filter_condition=Employee.id != employee_id,
             )
-            old_ceo_direct_report_ids = list(self.db.execute(old_ceo_direct_reports_query).scalars().all())
-
-            # Reassign old CEO's other direct reports to new CEO
-            if old_ceo_direct_report_ids:
-                update_stmt = (
-                    update(Employee)
-                    .where(
-                        and_(
-                            Employee.manager_id == current_ceo_id,
-                            Employee.id != employee_id
-                        )
-                    )
-                    .values(manager_id=employee_id)
-                )
-                self.db.execute(update_stmt)
-
-                # Bulk create audit logs for all reassigned employees
-                previous_state = {
-                    "manager_id": str(current_ceo_id),
-                }
-                new_state = {
-                    "manager_id": str(employee_id),
-                }
-
-                self.audit_service.bulk_create_audit_logs(
-                    entity_type=EntityType.EMPLOYEE,
-                    entity_ids=old_ceo_direct_report_ids,
-                    change_type=ChangeType.UPDATE,
-                    previous_state=previous_state,
-                    new_state=new_state,
-                    changed_by_user_id=changed_by_user_id,
-                )
 
         else:
             # Case 2: Employee does NOT report to current CEO
             # Employee's direct reports move to employee's original manager
             # All old CEO's direct reports move to new CEO
 
-            # Get IDs of employee's direct reports
-            employee_direct_reports_query = select(Employee.id).where(Employee.manager_id == employee_id)
-            employee_direct_report_ids = list(self.db.execute(employee_direct_reports_query).scalars().all())
-
             # Reassign employee's direct reports to employee's original manager
-            if employee_direct_report_ids:
-                update_stmt = (
-                    update(Employee)
-                    .where(Employee.manager_id == employee_id)
-                    .values(manager_id=original_manager_id)
-                )
-                self.db.execute(update_stmt)
-
-                # Bulk create audit logs for all reassigned direct reports
-                previous_state = {
-                    "manager_id": str(employee_id),
-                }
-                new_state = {
-                    "manager_id": str(original_manager_id) if original_manager_id else None,
-                }
-
-                self.audit_service.bulk_create_audit_logs(
-                    entity_type=EntityType.EMPLOYEE,
-                    entity_ids=employee_direct_report_ids,
-                    change_type=ChangeType.UPDATE,
-                    previous_state=previous_state,
-                    new_state=new_state,
-                    changed_by_user_id=changed_by_user_id,
-                )
-
-            # Get IDs of old CEO's direct reports
-            old_ceo_direct_reports_query = select(Employee.id).where(Employee.manager_id == current_ceo_id)
-            old_ceo_direct_report_ids = list(self.db.execute(old_ceo_direct_reports_query).scalars().all())
+            self._bulk_reassign_manager(
+                from_manager_id=employee_id,
+                to_manager_id=original_manager_id,
+                changed_by_user_id=changed_by_user_id,
+            )
 
             # Reassign old CEO's direct reports to new CEO
-            if old_ceo_direct_report_ids:
-                update_stmt = (
-                    update(Employee)
-                    .where(Employee.manager_id == current_ceo_id)
-                    .values(manager_id=employee_id)
-                )
-                self.db.execute(update_stmt)
-
-                # Bulk create audit logs for all reassigned direct reports
-                previous_state = {
-                    "manager_id": str(current_ceo_id),
-                }
-                new_state = {
-                    "manager_id": str(employee_id),
-                }
-
-                self.audit_service.bulk_create_audit_logs(
-                    entity_type=EntityType.EMPLOYEE,
-                    entity_ids=old_ceo_direct_report_ids,
-                    change_type=ChangeType.UPDATE,
-                    previous_state=previous_state,
-                    new_state=new_state,
-                    changed_by_user_id=changed_by_user_id,
-                )
+            self._bulk_reassign_manager(
+                from_manager_id=current_ceo_id,
+                to_manager_id=employee_id,
+                changed_by_user_id=changed_by_user_id,
+            )
 
         # Promote employee to CEO (remove manager)
         employee_previous_state = {
