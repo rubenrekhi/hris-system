@@ -13,6 +13,7 @@ from services.EmployeeService import EmployeeService
 from services.DepartmentService import DepartmentService
 from services.TeamService import TeamService
 from services.ImportService import ImportService
+from services.ExportService import ExportService
 
 
 # Temporary mock user class until auth is implemented
@@ -135,3 +136,9 @@ def get_import_service(db: Session = Depends(get_db)) -> ImportService:
     return ImportService(db)
 
 
+def get_export_service(db: Session = Depends(get_db)) -> ExportService:
+    """
+    FastAPI dependency — returns an ExportService instance for the current request.
+    The service is initialized with the database session.
+    """
+    return ExportService(db)
