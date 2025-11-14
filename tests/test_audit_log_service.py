@@ -213,15 +213,15 @@ class TestBulkCreateAuditLogs:
             new_state={"status": "ON_LEAVE"},
             changed_by_user_id=user_id,
         )
-        db_session.commit()
+        db_session.flush()
 
         # Assert
         assert len(audit_logs) == 100
-        # Verify all were persisted
-        persisted_logs = db_session.query(AuditLog).filter(
+        # Verify all were added to session (pending commit)
+        pending_logs = db_session.query(AuditLog).filter(
             AuditLog.changed_by_user_id == user_id
         ).all()
-        assert len(persisted_logs) == 100
+        assert len(pending_logs) == 100
 
     def test_bulk_create_audit_logs_does_not_commit(self, db_session: Session):
         """Should add to session but NOT commit (router's responsibility)."""

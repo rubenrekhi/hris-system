@@ -179,10 +179,12 @@ class TestListAuditLogsEndpoint:
         assert "changed_by_user_id" in first_item
         assert "created_at" in first_item
 
-        # List items should NOT include state fields
-        assert "previous_state" not in first_item
-        assert "new_state" not in first_item
-        assert "updated_at" not in first_item
+        # List items should NOT include state fields (lightweight list response by design)
+        # Verify ALL items exclude state fields, not just the first
+        for item in data["items"]:
+            assert "previous_state" not in item
+            assert "new_state" not in item
+            assert "updated_at" not in item
 
     def test_list_audit_logs_filter_by_entity_type(self, client, sample_audit_logs):
         """Should filter audit logs by entity_type query parameter."""
@@ -196,6 +198,15 @@ class TestListAuditLogsEndpoint:
         assert data["total"] == 2
         assert len(data["items"]) == 2
         assert all(item["entity_type"] == "EMPLOYEE" for item in data["items"])
+
+        # Verify we got the correct EMPLOYEE logs (both CREATE and UPDATE for entity_id_1)
+        entity_id_1 = str(sample_audit_logs["entity_id_1"])
+        returned_entity_ids = {item["entity_id"] for item in data["items"]}
+        assert entity_id_1 in returned_entity_ids
+
+        # Should have both CREATE and UPDATE change types
+        change_types = {item["change_type"] for item in data["items"]}
+        assert change_types == {"CREATE", "UPDATE"}
 
     def test_list_audit_logs_filter_by_entity_id(self, client, sample_audit_logs):
         """Should filter audit logs by entity_id query parameter."""
@@ -212,6 +223,10 @@ class TestListAuditLogsEndpoint:
         assert data["total"] == 2
         assert len(data["items"]) == 2
         assert all(item["entity_id"] == str(entity_id) for item in data["items"])
+
+        # Verify both CREATE and UPDATE change types are present for this entity
+        change_types = {item["change_type"] for item in data["items"]}
+        assert change_types == {"CREATE", "UPDATE"}
 
     def test_list_audit_logs_filter_by_change_type(self, client, sample_audit_logs):
         """Should filter audit logs by change_type query parameter."""

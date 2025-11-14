@@ -181,7 +181,8 @@ class TestCreateDepartment:
         db_session.commit()
 
         # Act & Assert - Try to create duplicate
-        with pytest.raises(Exception):  # Database will raise unique constraint error
+        from sqlalchemy.exc import IntegrityError
+        with pytest.raises(IntegrityError):  # Database will raise unique constraint error
             department_service.create_department(name="Engineering")
             db_session.commit()
 

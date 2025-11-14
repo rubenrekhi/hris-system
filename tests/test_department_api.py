@@ -188,7 +188,7 @@ class TestCreateDepartmentEndpoint:
         assert get_response.json()["name"] == "Engineering"
 
     def test_create_department_duplicate_name(self, client, sample_departments):
-        """Should return 400 for duplicate department name."""
+        """Should return 409 for duplicate department name."""
         # Arrange
         create_data = {"name": "Engineering"}  # Already exists
 
@@ -196,10 +196,10 @@ class TestCreateDepartmentEndpoint:
         response = client.post("/departments", json=create_data)
 
         # Assert
-        assert response.status_code == 400
+        assert response.status_code == 409
         data = response.json()
         assert "detail" in data
-        assert "Failed to create department" in data["detail"]
+        assert "already exists" in data["detail"]
 
     def test_create_department_empty_name(self, client):
         """Should return 422 for empty name."""
@@ -434,7 +434,7 @@ class TestUpdateDepartmentEndpoint:
         assert response.status_code == 422
 
     def test_update_department_duplicate_name(self, client, sample_departments):
-        """Should return 500 for duplicate name (unique constraint violation)."""
+        """Should return 409 for duplicate name (unique constraint violation)."""
         # Arrange
         department_id = str(sample_departments[0].id)
         update_data = {"name": "Sales"}  # Already exists
@@ -443,9 +443,9 @@ class TestUpdateDepartmentEndpoint:
         response = client.patch(f"/departments/{department_id}", json=update_data)
 
         # Assert
-        assert response.status_code == 500
+        assert response.status_code == 409
         data = response.json()
-        assert "Failed to update department" in data["detail"]
+        assert "already exists" in data["detail"]
 
     def test_update_department_creates_audit_log(self, client, sample_departments, test_db_session):
         """Should create audit log entry."""
