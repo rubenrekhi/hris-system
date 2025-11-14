@@ -73,30 +73,19 @@ def get_team(
     Returns all team fields including:
     - Basic info: name
     - Relationships: lead_id, parent_team_id, department_id
+    - Related names: lead_name, parent_team_name, department_name
     - Members: List of all team members with their basic info
     - Metadata: created_at, updated_at
     """
-    team = team_service.get_team(team_id)
+    team = team_service.get_team_with_details(team_id)
 
     if not team:
         raise HTTPException(status_code=404, detail="Team not found")
 
-    # Get team members
-    members = team_service.get_team_members(team_id)
+    # Convert members from ORM objects to TeamMember schema
+    team["members"] = [TeamMember.model_validate(member) for member in team["members"]]
 
-    # Create response with members
-    team_dict = {
-        "id": team.id,
-        "name": team.name,
-        "lead_id": team.lead_id,
-        "parent_team_id": team.parent_team_id,
-        "department_id": team.department_id,
-        "created_at": team.created_at,
-        "updated_at": team.updated_at,
-        "members": [TeamMember.model_validate(member) for member in members],
-    }
-
-    return TeamDetail.model_validate(team_dict)
+    return TeamDetail.model_validate(team)
 
 
 @router.get("/{team_id}/children", response_model=list[TeamListItem])

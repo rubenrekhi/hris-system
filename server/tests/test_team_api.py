@@ -249,6 +249,14 @@ class TestGetTeam:
         assert "name" in member_data
         assert "email" in member_data
 
+        # Verify joined name fields
+        assert "lead_name" in data
+        assert "parent_team_name" in data
+        assert "department_name" in data
+        assert data["lead_name"] is None  # No lead assigned in fixture
+        assert data["parent_team_name"] is None  # No parent team in fixture
+        assert data["department_name"] == "Engineering"  # Has department
+
     def test_get_team_not_found(self, client):
         """Test getting non-existent team."""
         from uuid import uuid4
