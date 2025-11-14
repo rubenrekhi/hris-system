@@ -130,12 +130,20 @@ class TestListEmployees:
         assert total == 6
         assert len(employees) == 6
         # Check alphabetical ordering
-        assert employees[0].name == "Alice Anderson"
-        assert employees[1].name == "Bob Brown"
-        assert employees[2].name == "Charlie Chen"
-        assert employees[3].name == "Diana Davis"
-        assert employees[4].name == "Eve Evans"
-        assert employees[5].name == "Frank Fisher"
+        assert employees[0]['name'] == "Alice Anderson"
+        assert employees[1]['name'] == "Bob Brown"
+        assert employees[2]['name'] == "Charlie Chen"
+        assert employees[3]['name'] == "Diana Davis"
+        assert employees[4]['name'] == "Eve Evans"
+        assert employees[5]['name'] == "Frank Fisher"
+
+        # Check that department_name and team_name fields are present
+        assert employees[0]['department_name'] == "Engineering"
+        assert employees[0]['team_name'] == "Backend Team"
+        assert employees[1]['department_name'] == "Engineering"
+        assert employees[1]['team_name'] == "Frontend Team"
+        assert employees[5]['department_name'] == "HR"
+        assert employees[5]['team_name'] is None  # Frank has no team
 
     def test_list_employees_filter_by_team(self, employee_service, sample_employees):
         """Should filter employees by team_id."""
@@ -148,9 +156,13 @@ class TestListEmployees:
         # Assert
         assert total == 2
         assert len(employees) == 2
-        assert all(emp.team_id == backend_team_id for emp in employees)
-        assert employees[0].name == "Alice Anderson"
-        assert employees[1].name == "Charlie Chen"
+        assert all(emp['team_id'] == backend_team_id for emp in employees)
+        assert employees[0]['name'] == "Alice Anderson"
+        assert employees[1]['name'] == "Charlie Chen"
+
+        # Verify team_name and department_name are populated
+        assert all(emp['team_name'] == "Backend Team" for emp in employees)
+        assert all(emp['department_name'] == "Engineering" for emp in employees)
 
     def test_list_employees_filter_by_department(self, employee_service, sample_employees):
         """Should filter employees by department_id."""
@@ -163,7 +175,10 @@ class TestListEmployees:
         # Assert
         assert total == 3
         assert len(employees) == 3
-        assert all(emp.department_id == eng_dept_id for emp in employees)
+        assert all(emp['department_id'] == eng_dept_id for emp in employees)
+
+        # Verify department_name is populated
+        assert all(emp['department_name'] == "Engineering" for emp in employees)
 
     def test_list_employees_filter_by_status_active(self, employee_service, sample_employees):
         """Should filter employees by ACTIVE status."""
@@ -173,7 +188,7 @@ class TestListEmployees:
         # Assert
         assert total == 4
         assert len(employees) == 4
-        assert all(emp.status == EmployeeStatus.ACTIVE for emp in employees)
+        assert all(emp['status'] == EmployeeStatus.ACTIVE for emp in employees)
 
     def test_list_employees_filter_by_status_on_leave(self, employee_service, sample_employees):
         """Should filter employees by ON_LEAVE status."""
@@ -183,7 +198,7 @@ class TestListEmployees:
         # Assert
         assert total == 2
         assert len(employees) == 2
-        assert all(emp.status == EmployeeStatus.ON_LEAVE for emp in employees)
+        assert all(emp['status'] == EmployeeStatus.ON_LEAVE for emp in employees)
 
     def test_list_employees_filter_by_min_salary(self, employee_service, sample_employees):
         """Should filter employees by minimum salary."""
@@ -193,7 +208,7 @@ class TestListEmployees:
         # Assert
         assert total == 3
         assert len(employees) == 3
-        assert all(emp.salary >= 100000 for emp in employees)
+        assert all(emp['salary'] >= 100000 for emp in employees)
 
     def test_list_employees_filter_by_max_salary(self, employee_service, sample_employees):
         """Should filter employees by maximum salary."""
@@ -203,7 +218,7 @@ class TestListEmployees:
         # Assert
         assert total == 3
         assert len(employees) == 3
-        assert all(emp.salary <= 95000 for emp in employees)
+        assert all(emp['salary'] <= 95000 for emp in employees)
 
     def test_list_employees_filter_by_salary_range(self, employee_service, sample_employees):
         """Should filter employees by salary range (min and max)."""
@@ -215,7 +230,7 @@ class TestListEmployees:
         # Assert
         assert total == 4
         assert len(employees) == 4
-        assert all(90000 <= emp.salary <= 115000 for emp in employees)
+        assert all(90000 <= emp['salary'] <= 115000 for emp in employees)
 
     def test_list_employees_search_by_name(self, employee_service, sample_employees):
         """Should search employees by name (case-insensitive)."""
@@ -225,7 +240,7 @@ class TestListEmployees:
         # Assert
         assert total == 1
         assert len(employees) == 1
-        assert employees[0].name == "Bob Brown"
+        assert employees[0]['name'] == "Bob Brown"
 
     def test_list_employees_search_by_name_partial(self, employee_service, sample_employees):
         """Should find employees by partial name match."""
@@ -244,7 +259,7 @@ class TestListEmployees:
         # Assert
         assert total == 1
         assert len(employees) == 1
-        assert employees[0].email == "alice@example.com"
+        assert employees[0]['email'] == "alice@example.com"
 
     def test_list_employees_search_by_email_partial(self, employee_service, sample_employees):
         """Should find employees by partial email match."""
@@ -281,9 +296,9 @@ class TestListEmployees:
         # Assert
         assert total == 2  # Alice and Bob
         assert len(employees) == 2
-        assert all(emp.department_id == eng_dept_id for emp in employees)
-        assert all(emp.status == EmployeeStatus.ACTIVE for emp in employees)
-        assert all(emp.salary >= 110000 for emp in employees)
+        assert all(emp['department_id'] == eng_dept_id for emp in employees)
+        assert all(emp['status'] == EmployeeStatus.ACTIVE for emp in employees)
+        assert all(emp['salary'] >= 110000 for emp in employees)
 
     def test_list_employees_pagination_limit(self, employee_service, sample_employees):
         """Should respect limit parameter."""
@@ -294,9 +309,9 @@ class TestListEmployees:
         assert total == 6  # Total count unchanged
         assert len(employees) == 3  # Only 3 returned
         # First 3 alphabetically
-        assert employees[0].name == "Alice Anderson"
-        assert employees[1].name == "Bob Brown"
-        assert employees[2].name == "Charlie Chen"
+        assert employees[0]['name'] == "Alice Anderson"
+        assert employees[1]['name'] == "Bob Brown"
+        assert employees[2]['name'] == "Charlie Chen"
 
     def test_list_employees_pagination_offset(self, employee_service, sample_employees):
         """Should respect offset parameter."""
@@ -307,8 +322,8 @@ class TestListEmployees:
         assert total == 6  # Total count unchanged
         assert len(employees) == 2  # Only 2 returned
         # Skip first 2, get next 2
-        assert employees[0].name == "Charlie Chen"
-        assert employees[1].name == "Diana Davis"
+        assert employees[0]['name'] == "Charlie Chen"
+        assert employees[1]['name'] == "Diana Davis"
 
     def test_list_employees_pagination_offset_beyond_results(self, employee_service, sample_employees):
         """Should return empty list when offset exceeds total."""
@@ -360,10 +375,10 @@ class TestListEmployees:
         assert total == 2
         assert len(employees) == 2
         # Should be ordered by name, then id
-        assert employees[0].name == "John Doe"
-        assert employees[1].name == "John Doe"
+        assert employees[0]['name'] == "John Doe"
+        assert employees[1]['name'] == "John Doe"
         # ID ordering (ascending)
-        assert employees[0].id < employees[1].id
+        assert employees[0]['id'] < employees[1]['id']
 
     def test_list_employees_returns_tuple(self, employee_service, sample_employees):
         """Should return tuple of (list, int)."""
@@ -405,7 +420,7 @@ class TestListEmployees:
         assert len(employees_lower) == 1
         assert len(employees_upper) == 1
         assert len(employees_mixed) == 1
-        assert employees_lower[0].name == employees_upper[0].name == employees_mixed[0].name
+        assert employees_lower[0]['name'] == employees_upper[0]['name'] == employees_mixed[0]['name']
 
     def test_list_employees_case_insensitive_email_search(self, employee_service, sample_employees):
         """Should perform case-insensitive email search."""
@@ -416,7 +431,7 @@ class TestListEmployees:
         # Assert
         assert len(employees_lower) == 1
         assert len(employees_upper) == 1
-        assert employees_lower[0].email == employees_upper[0].email
+        assert employees_lower[0]['email'] == employees_upper[0]['email']
 
 
 class TestGetEmployee:

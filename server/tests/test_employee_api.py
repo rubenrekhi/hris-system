@@ -174,9 +174,17 @@ class TestListEmployeesEndpoint:
         data = response.json()
 
         first_item = data["items"][0]
+        # Check required fields
         assert "id" in first_item
         assert "name" in first_item
-        assert len(first_item) == 2  # Only id and name fields
+        assert "email" in first_item
+        assert "title" in first_item
+        assert "status" in first_item
+        assert "department_id" in first_item
+        assert "team_id" in first_item
+        assert "department_name" in first_item
+        assert "team_name" in first_item
+        assert len(first_item) == 9  # All EmployeeListItem fields
 
     def test_list_employees_alphabetical_order(self, client, sample_employee_data):
         """Should return employees ordered alphabetically by name."""
@@ -968,10 +976,17 @@ class TestGetDirectReportsEndpoint:
         data = response.json()
         assert len(data) == 1
 
-        # Check schema (only id and name)
+        # Check schema - all EmployeeListItem fields
         assert "id" in data[0]
         assert "name" in data[0]
-        assert len(data[0]) == 2
+        assert "email" in data[0]
+        assert "title" in data[0]
+        assert "status" in data[0]
+        assert "department_id" in data[0]
+        assert "team_id" in data[0]
+        assert "department_name" in data[0]
+        assert "team_name" in data[0]
+        assert len(data[0]) == 9
 
     def test_get_direct_reports_alphabetical_order(self, client, test_db_session):
         """Should return direct reports ordered alphabetically."""
