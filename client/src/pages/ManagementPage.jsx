@@ -1,11 +1,11 @@
-import { Container, Typography } from '@mui/material';
+import { Box, Typography } from '@mui/material';
 
 export default function ManagementPage() {
   return (
-    <Container maxWidth="lg">
+    <Box sx={{ px: 3, py: 2 }}>
       <Typography variant="h3" component="h1" gutterBottom>
         Management
       </Typography>
-    </Container>
+    </Box>
   );
 }
