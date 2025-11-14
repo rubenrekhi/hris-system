@@ -1,5 +1,9 @@
+from dotenv import load_dotenv
+load_dotenv()  # Load environment variables from .env file
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from routers import AuditLogRouter, GlobalSearchRouter, EmployeeRouter, DepartmentRouter, TeamRouter, ImportRouter, ExportRouter
 
 
 app = FastAPI(
@@ -41,6 +45,18 @@ Human Resources Information System API for managing employees, departments, team
             "name": "audit",
             "description": "Audit log operations and system activity tracking.",
         },
+        {
+            "name": "search",
+            "description": "Global search across employees, departments, and teams.",
+        },
+        {
+            "name": "imports",
+            "description": "Bulk import operations for employees and other entities.",
+        },
+        {
+            "name": "exports",
+            "description": "Export employee data and org charts in various formats (CSV, Excel, PDF).",
+        },
     ],
 )
 
@@ -73,3 +89,12 @@ def health_check():
     """
     return {"status": "healthy"}
 
+
+# Register routers
+app.include_router(AuditLogRouter.router)
+app.include_router(GlobalSearchRouter.router)
+app.include_router(EmployeeRouter.router)
+app.include_router(DepartmentRouter.router)
+app.include_router(TeamRouter.router)
+app.include_router(ImportRouter.router)
+app.include_router(ExportRouter.router)
