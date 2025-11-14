@@ -6,6 +6,7 @@ API routes for department management and operations.
 
 from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.exc import IntegrityError
 from services.DepartmentService import DepartmentService
 from schemas.DepartmentSchemas import (
     DepartmentCreate,
@@ -45,14 +46,12 @@ def create_department(
             name=create_data.name,
             changed_by_user_id=user.id,
         )
-    except Exception as e:
-        # Handle unique constraint violation
-        raise HTTPException(status_code=400, detail=f"Failed to create department: {str(e)}")
-
-    # Commit the transaction (including audit log)
-    try:
+        # Commit the transaction (including audit log)
         db.commit()
         db.refresh(department)
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Department name already exists")
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Failed to create department: {str(e)}")
@@ -112,6 +111,9 @@ def update_department(
     try:
         db.commit()
         db.refresh(department)
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Department name already exists")
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Failed to update department: {str(e)}")
