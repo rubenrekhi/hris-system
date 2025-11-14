@@ -12,6 +12,8 @@ from schemas.DepartmentSchemas import (
     DepartmentCreate,
     DepartmentUpdate,
     DepartmentDetail,
+    DepartmentListItem,
+    DepartmentListResponse,
     PaginationQuery,
     TeamListResponse,
     TeamListItem,
@@ -57,6 +59,34 @@ def create_department(
         raise HTTPException(status_code=500, detail=f"Failed to create department: {str(e)}")
 
     return DepartmentDetail.model_validate(department)
+
+
+@router.get("", response_model=DepartmentListResponse)
+def list_departments(
+    query: PaginationQuery = Depends(),
+    user = Depends(require_roles("member")),
+    department_service: DepartmentService = Depends(get_department_service),
+):
+    """
+    List all departments with pagination.
+
+    Returns departments ordered alphabetically by name.
+
+    Pagination:
+    - limit: Number of results per page (1-100, default 25)
+    - offset: Number of results to skip (default 0)
+    """
+    departments, total = department_service.list_departments(
+        limit=query.limit,
+        offset=query.offset,
+    )
+
+    return DepartmentListResponse(
+        items=[DepartmentListItem.model_validate(dept) for dept in departments],
+        total=total,
+        limit=query.limit,
+        offset=query.offset,
+    )
 
 
 @router.get("/{department_id}", response_model=DepartmentDetail)
