@@ -18,6 +18,32 @@ export class ApiError extends Error {
 }
 
 /**
+ * Format error message from FastAPI error response.
+ * Handles both HTTPException errors (string detail) and Pydantic validation errors (array detail).
+ * @param {any} detail - Error detail from FastAPI response
+ * @returns {string} Formatted error message
+ */
+function formatErrorMessage(detail) {
+  // HTTPException: detail is a string
+  if (typeof detail === 'string') {
+    return detail;
+  }
+
+  // Pydantic validation error: detail is an array of validation errors
+  if (Array.isArray(detail)) {
+    const errors = detail.map((err) => {
+      const field = err.loc ? err.loc.slice(1).join('.') : 'unknown';
+      const message = err.msg || 'validation error';
+      return `${field}: ${message}`;
+    });
+    return errors.join('; ');
+  }
+
+  // Fallback for unexpected formats
+  return JSON.stringify(detail);
+}
+
+/**
  * Handle API response, extracting data or throwing ApiError.
  * @param {Response} response - Fetch API response object
  * @returns {Promise<any>} Parsed JSON data or null for 204 responses
@@ -32,7 +58,11 @@ async function handleResponse(response) {
       errorData = { detail: response.statusText };
     }
 
-    const message = errorData.detail || `HTTP ${response.status}: ${response.statusText}`;
+    // Format error message from FastAPI response
+    const message = errorData.detail
+      ? formatErrorMessage(errorData.detail)
+      : `HTTP ${response.status}: ${response.statusText}`;
+
     throw new ApiError(message, response.status, errorData);
   }
 
