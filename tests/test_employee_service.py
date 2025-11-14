@@ -2442,6 +2442,514 @@ class TestDeleteEmployee:
         assert employee_still_exists is not None
 
 
+class TestAssignManager:
+    """Tests for EmployeeService.assign_manager() method."""
+
+    def test_assign_manager_success(self, employee_service, db_session):
+        """Should assign manager to employee."""
+        # Arrange - Create CEO and two employees
+        ceo = Employee(
+            name="CEO",
+            email="ceo@example.com",
+            status=EmployeeStatus.ACTIVE,
+            manager_id=None,
+        )
+        manager = Employee(
+            name="Manager",
+            email="manager@example.com",
+            status=EmployeeStatus.ACTIVE,
+        )
+        employee = Employee(
+            name="Employee",
+            email="employee@example.com",
+            status=EmployeeStatus.ACTIVE,
+        )
+        db_session.add_all([ceo, manager, employee])
+        db_session.flush()
+
+        # Set initial managers
+        manager.manager_id = ceo.id
+        employee.manager_id = ceo.id
+        db_session.commit()
+
+        user_id = uuid4()
+
+        # Act - Reassign employee from CEO to Manager
+        result = employee_service.assign_manager(
+            employee.id,
+            manager.id,
+            changed_by_user_id=user_id,
+        )
+
+        # Assert
+        assert result is not None
+        assert result.manager_id == manager.id
+
+        # Verify in database (flush to make changes visible)
+        db_session.flush()
+        db_session.refresh(employee)
+        assert employee.manager_id == manager.id
+
+    def test_assign_manager_to_employee_with_no_manager(self, employee_service, db_session):
+        """Should assign first manager to employee who has none."""
+        # Arrange - Create two employees, one is CEO
+        ceo = Employee(
+            name="CEO",
+            email="ceo@example.com",
+            status=EmployeeStatus.ACTIVE,
+            manager_id=None,
+        )
+        employee = Employee(
+            name="Employee",
+            email="employee@example.com",
+            status=EmployeeStatus.ACTIVE,
+            manager_id=None,  # No manager initially
+        )
+        db_session.add_all([ceo, employee])
+        db_session.commit()
+
+        user_id = uuid4()
+
+        # Act
+        result = employee_service.assign_manager(
+            employee.id,
+            ceo.id,
+            changed_by_user_id=user_id,
+        )
+
+        # Assert
+        assert result is not None
+        assert result.manager_id == ceo.id
+
+    def test_assign_manager_employee_with_direct_reports(self, employee_service, db_session):
+        """Should assign manager to employee who has direct reports (reports stay with employee)."""
+        # Arrange - Create hierarchy: CEO -> Manager1, Employee -> Direct Report
+        ceo = Employee(
+            name="CEO",
+            email="ceo@example.com",
+            status=EmployeeStatus.ACTIVE,
+            manager_id=None,
+        )
+        manager1 = Employee(
+            name="Manager 1",
+            email="manager1@example.com",
+            status=EmployeeStatus.ACTIVE,
+        )
+        employee = Employee(
+            name="Employee",
+            email="employee@example.com",
+            status=EmployeeStatus.ACTIVE,
+        )
+        direct_report = Employee(
+            name="Direct Report",
+            email="report@example.com",
+            status=EmployeeStatus.ACTIVE,
+        )
+        db_session.add_all([ceo, manager1, employee, direct_report])
+        db_session.flush()
+
+        # Set initial hierarchy: CEO -> Manager1, CEO -> Employee -> Direct Report
+        manager1.manager_id = ceo.id
+        employee.manager_id = ceo.id
+        direct_report.manager_id = employee.id
+        db_session.commit()
+
+        user_id = uuid4()
+
+        # Act - Reassign employee to Manager1
+        result = employee_service.assign_manager(
+            employee.id,
+            manager1.id,
+            changed_by_user_id=user_id,
+        )
+
+        # Assert
+        assert result is not None
+        assert result.manager_id == manager1.id
+
+        # Verify direct report still reports to employee
+        db_session.refresh(direct_report)
+        assert direct_report.manager_id == employee.id
+
+    def test_assign_manager_employee_not_found(self, employee_service, db_session):
+        """Should return None when employee does not exist."""
+        # Arrange
+        fake_employee_id = uuid4()
+        fake_manager_id = uuid4()
+        user_id = uuid4()
+
+        # Act
+        result = employee_service.assign_manager(
+            fake_employee_id,
+            fake_manager_id,
+            changed_by_user_id=user_id,
+        )
+
+        # Assert
+        assert result is None
+
+    def test_assign_manager_manager_not_found(self, employee_service, db_session):
+        """Should raise ValueError when new manager does not exist."""
+        # Arrange - Create employee
+        employee = Employee(
+            name="Employee",
+            email="employee@example.com",
+            status=EmployeeStatus.ACTIVE,
+            manager_id=None,
+        )
+        db_session.add(employee)
+        db_session.commit()
+
+        fake_manager_id = uuid4()
+        user_id = uuid4()
+
+        # Act & Assert
+        with pytest.raises(ValueError, match="Manager with ID .* does not exist"):
+            employee_service.assign_manager(
+                employee.id,
+                fake_manager_id,
+                changed_by_user_id=user_id,
+            )
+
+    def test_assign_manager_self_management(self, employee_service, db_session):
+        """Should raise ValueError when employee tries to be their own manager."""
+        # Arrange - Create employee
+        employee = Employee(
+            name="Employee",
+            email="employee@example.com",
+            status=EmployeeStatus.ACTIVE,
+            manager_id=None,
+        )
+        db_session.add(employee)
+        db_session.commit()
+
+        user_id = uuid4()
+
+        # Act & Assert
+        with pytest.raises(ValueError, match="circular dependency"):
+            employee_service.assign_manager(
+                employee.id,
+                employee.id,  # Self-management
+                changed_by_user_id=user_id,
+            )
+
+    def test_assign_manager_direct_circular_dependency(self, employee_service, db_session):
+        """Should raise ValueError for direct circular dependency (A->B, trying B->A)."""
+        # Arrange - Create hierarchy: A -> B
+        employee_a = Employee(
+            name="Employee A",
+            email="a@example.com",
+            status=EmployeeStatus.ACTIVE,
+            manager_id=None,
+        )
+        employee_b = Employee(
+            name="Employee B",
+            email="b@example.com",
+            status=EmployeeStatus.ACTIVE,
+        )
+        db_session.add_all([employee_a, employee_b])
+        db_session.flush()
+
+        # A -> B (B reports to A)
+        employee_b.manager_id = employee_a.id
+        db_session.commit()
+
+        user_id = uuid4()
+
+        # Act & Assert - Try to make A report to B (would create cycle)
+        with pytest.raises(ValueError, match="circular dependency"):
+            employee_service.assign_manager(
+                employee_a.id,
+                employee_b.id,
+                changed_by_user_id=user_id,
+            )
+
+    def test_assign_manager_three_level_circular_dependency(self, employee_service, db_session):
+        """Should raise ValueError for 3-level circular dependency (A->B->C, trying C->A)."""
+        # Arrange - Create hierarchy: A -> B -> C
+        employee_a = Employee(
+            name="Employee A",
+            email="a@example.com",
+            status=EmployeeStatus.ACTIVE,
+            manager_id=None,
+        )
+        employee_b = Employee(
+            name="Employee B",
+            email="b@example.com",
+            status=EmployeeStatus.ACTIVE,
+        )
+        employee_c = Employee(
+            name="Employee C",
+            email="c@example.com",
+            status=EmployeeStatus.ACTIVE,
+        )
+        db_session.add_all([employee_a, employee_b, employee_c])
+        db_session.flush()
+
+        # A -> B -> C
+        employee_b.manager_id = employee_a.id
+        employee_c.manager_id = employee_b.id
+        db_session.commit()
+
+        user_id = uuid4()
+
+        # Act & Assert - Try to make A report to C (would create cycle)
+        with pytest.raises(ValueError, match="circular dependency"):
+            employee_service.assign_manager(
+                employee_a.id,
+                employee_c.id,
+                changed_by_user_id=user_id,
+            )
+
+    def test_assign_manager_deep_circular_dependency_five_levels(self, employee_service, db_session):
+        """Should raise ValueError for deep 5-level circular dependency (A->B->C->D->E, trying E->A)."""
+        # Arrange - Create hierarchy: A -> B -> C -> D -> E
+        employees = []
+        for letter in ['A', 'B', 'C', 'D', 'E']:
+            emp = Employee(
+                name=f"Employee {letter}",
+                email=f"{letter.lower()}@example.com",
+                status=EmployeeStatus.ACTIVE,
+                manager_id=None,
+            )
+            employees.append(emp)
+            db_session.add(emp)
+        db_session.flush()
+
+        # Create chain: A -> B -> C -> D -> E
+        for i in range(1, len(employees)):
+            employees[i].manager_id = employees[i-1].id
+        db_session.commit()
+
+        user_id = uuid4()
+
+        # Act & Assert - Try to make A report to E (would create deep cycle)
+        with pytest.raises(ValueError, match="circular dependency"):
+            employee_service.assign_manager(
+                employees[0].id,  # Employee A
+                employees[4].id,  # Employee E
+                changed_by_user_id=user_id,
+            )
+
+    def test_assign_manager_middle_node_circular_dependency(self, employee_service, db_session):
+        """Should raise ValueError for circular dependency at middle node (A->B->C->D, trying B->D)."""
+        # Arrange - Create hierarchy: A -> B -> C -> D
+        employee_a = Employee(
+            name="Employee A",
+            email="a@example.com",
+            status=EmployeeStatus.ACTIVE,
+            manager_id=None,
+        )
+        employee_b = Employee(
+            name="Employee B",
+            email="b@example.com",
+            status=EmployeeStatus.ACTIVE,
+        )
+        employee_c = Employee(
+            name="Employee C",
+            email="c@example.com",
+            status=EmployeeStatus.ACTIVE,
+        )
+        employee_d = Employee(
+            name="Employee D",
+            email="d@example.com",
+            status=EmployeeStatus.ACTIVE,
+        )
+        db_session.add_all([employee_a, employee_b, employee_c, employee_d])
+        db_session.flush()
+
+        # A -> B -> C -> D
+        employee_b.manager_id = employee_a.id
+        employee_c.manager_id = employee_b.id
+        employee_d.manager_id = employee_c.id
+        db_session.commit()
+
+        user_id = uuid4()
+
+        # Act & Assert - Try to make B report to D (would create cycle B->C->D->B)
+        with pytest.raises(ValueError, match="circular dependency"):
+            employee_service.assign_manager(
+                employee_b.id,
+                employee_d.id,
+                changed_by_user_id=user_id,
+            )
+
+    def test_assign_manager_complex_valid_reassignment(self, employee_service, db_session):
+        """Should allow valid reassignment in complex hierarchy without creating cycle."""
+        # Arrange - Create hierarchy:
+        #     CEO
+        #    /   \
+        #   A     B
+        #   |     |
+        #   C     D
+        ceo = Employee(name="CEO", email="ceo@example.com", status=EmployeeStatus.ACTIVE, manager_id=None)
+        emp_a = Employee(name="Employee A", email="a@example.com", status=EmployeeStatus.ACTIVE)
+        emp_b = Employee(name="Employee B", email="b@example.com", status=EmployeeStatus.ACTIVE)
+        emp_c = Employee(name="Employee C", email="c@example.com", status=EmployeeStatus.ACTIVE)
+        emp_d = Employee(name="Employee D", email="d@example.com", status=EmployeeStatus.ACTIVE)
+
+        db_session.add_all([ceo, emp_a, emp_b, emp_c, emp_d])
+        db_session.flush()
+
+        emp_a.manager_id = ceo.id
+        emp_b.manager_id = ceo.id
+        emp_c.manager_id = emp_a.id
+        emp_d.manager_id = emp_b.id
+        db_session.commit()
+
+        user_id = uuid4()
+
+        # Act - Move D from B's branch to A's branch (valid, no cycle)
+        result = employee_service.assign_manager(
+            emp_d.id,
+            emp_a.id,
+            changed_by_user_id=user_id,
+        )
+
+        # Assert
+        assert result is not None
+        assert result.manager_id == emp_a.id
+
+        # Verify in database (flush to make changes visible)
+        db_session.flush()
+        db_session.refresh(emp_d)
+        assert emp_d.manager_id == emp_a.id
+
+    def test_assign_manager_sibling_to_sibling_valid(self, employee_service, db_session):
+        """Should allow assigning sibling as manager (both report to same manager initially)."""
+        # Arrange - Create hierarchy: CEO -> A, CEO -> B
+        ceo = Employee(name="CEO", email="ceo@example.com", status=EmployeeStatus.ACTIVE, manager_id=None)
+        emp_a = Employee(name="Employee A", email="a@example.com", status=EmployeeStatus.ACTIVE)
+        emp_b = Employee(name="Employee B", email="b@example.com", status=EmployeeStatus.ACTIVE)
+
+        db_session.add_all([ceo, emp_a, emp_b])
+        db_session.flush()
+
+        emp_a.manager_id = ceo.id
+        emp_b.manager_id = ceo.id
+        db_session.commit()
+
+        user_id = uuid4()
+
+        # Act - Make B report to A (both were siblings)
+        result = employee_service.assign_manager(
+            emp_b.id,
+            emp_a.id,
+            changed_by_user_id=user_id,
+        )
+
+        # Assert
+        assert result is not None
+        assert result.manager_id == emp_a.id
+
+        # A should still report to CEO
+        db_session.refresh(emp_a)
+        assert emp_a.manager_id == ceo.id
+
+    def test_assign_manager_creates_audit_log(self, employee_service, db_session):
+        """Should create audit log entry for manager assignment."""
+        # Arrange
+        ceo = Employee(name="CEO", email="ceo@example.com", status=EmployeeStatus.ACTIVE, manager_id=None)
+        manager = Employee(name="Manager", email="manager@example.com", status=EmployeeStatus.ACTIVE)
+        employee = Employee(name="Employee", email="employee@example.com", status=EmployeeStatus.ACTIVE)
+
+        db_session.add_all([ceo, manager, employee])
+        db_session.flush()
+
+        manager.manager_id = ceo.id
+        employee.manager_id = ceo.id
+        db_session.commit()
+
+        user_id = uuid4()
+
+        # Act
+        employee_service.assign_manager(
+            employee.id,
+            manager.id,
+            changed_by_user_id=user_id,
+        )
+        db_session.flush()
+
+        # Assert - Verify audit log was created
+        audit_logs = db_session.query(AuditLog).filter(
+            AuditLog.entity_type == EntityType.EMPLOYEE,
+            AuditLog.entity_id == employee.id,
+            AuditLog.change_type == ChangeType.UPDATE,
+        ).all()
+
+        assert len(audit_logs) == 1
+        assert audit_logs[0].changed_by_user_id == user_id
+        assert audit_logs[0].previous_state["manager_id"] == str(ceo.id)
+        assert audit_logs[0].new_state["manager_id"] == str(manager.id)
+
+    def test_assign_manager_audit_log_tracks_previous_value(self, employee_service, db_session):
+        """Should track previous manager_id in audit log."""
+        # Arrange
+        ceo = Employee(name="CEO", email="ceo@example.com", status=EmployeeStatus.ACTIVE, manager_id=None)
+        old_manager = Employee(name="Old Manager", email="old@example.com", status=EmployeeStatus.ACTIVE)
+        new_manager = Employee(name="New Manager", email="new@example.com", status=EmployeeStatus.ACTIVE)
+        employee = Employee(name="Employee", email="employee@example.com", status=EmployeeStatus.ACTIVE)
+
+        db_session.add_all([ceo, old_manager, new_manager, employee])
+        db_session.flush()
+
+        old_manager.manager_id = ceo.id
+        new_manager.manager_id = ceo.id
+        employee.manager_id = old_manager.id
+        db_session.commit()
+
+        old_manager_id = old_manager.id
+        user_id = uuid4()
+
+        # Act - Reassign from old_manager to new_manager
+        employee_service.assign_manager(
+            employee.id,
+            new_manager.id,
+            changed_by_user_id=user_id,
+        )
+        db_session.flush()
+
+        # Assert - Verify audit log captured old manager
+        audit_logs = db_session.query(AuditLog).filter(
+            AuditLog.entity_type == EntityType.EMPLOYEE,
+            AuditLog.entity_id == employee.id,
+        ).all()
+
+        assert len(audit_logs) == 1
+        assert audit_logs[0].previous_state["manager_id"] == str(old_manager_id)
+        assert audit_logs[0].new_state["manager_id"] == str(new_manager.id)
+
+    def test_assign_manager_does_not_commit(self, employee_service, db_session):
+        """Should not commit transaction (router's responsibility)."""
+        # Arrange
+        ceo = Employee(name="CEO", email="ceo@example.com", status=EmployeeStatus.ACTIVE, manager_id=None)
+        manager = Employee(name="Manager", email="manager@example.com", status=EmployeeStatus.ACTIVE)
+        employee = Employee(name="Employee", email="employee@example.com", status=EmployeeStatus.ACTIVE)
+
+        db_session.add_all([ceo, manager, employee])
+        db_session.flush()
+
+        manager.manager_id = ceo.id
+        employee.manager_id = ceo.id
+        db_session.commit()
+
+        user_id = uuid4()
+
+        # Act
+        employee_service.assign_manager(
+            employee.id,
+            manager.id,
+            changed_by_user_id=user_id,
+        )
+
+        # Rollback to verify service didn't commit
+        db_session.rollback()
+
+        # Assert - Changes should be rolled back
+        db_session.refresh(employee)
+        assert employee.manager_id == ceo.id  # Should still be CEO, not manager
+
+
 class TestReplaceCEO:
     """Tests for EmployeeService.replace_ceo() method."""
 

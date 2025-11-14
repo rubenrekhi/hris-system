@@ -201,6 +201,61 @@ class EmployeeService:
                 changed_by_user_id=changed_by_user_id,
             )
 
+    def _can_assign_manager(
+        self,
+        employee_id: UUID,
+        new_manager_id: Optional[UUID],
+    ) -> bool:
+        """
+        Return True if assigning new_manager_id as manager for employee_id
+        will NOT create a cycle in the org tree.
+
+        Rules:
+        - new_manager_id is None → valid (cycle-free by definition)
+        - new_manager_id == employee_id → invalid (self-management)
+        - Otherwise, invalid if new_manager_id is in employee_id's subtree
+
+        Args:
+            employee_id: UUID of the employee being reassigned
+            new_manager_id: UUID of the proposed new manager (or None for CEO)
+
+        Returns:
+            True if assignment is valid (no cycle), False otherwise
+        """
+        # 1) No manager (become CEO) is always safe from a cycle perspective
+        if new_manager_id is None:
+            return True
+
+        # 2) Can't be your own manager
+        if new_manager_id == employee_id:
+            return False
+
+        # 3) Recursive CTE to get the full subtree under employee_id
+        #    If new_manager_id shows up in that subtree, it's invalid.
+
+        # base: start from the employee we're reparenting
+        base = select(Employee.id).where(Employee.id == employee_id)
+        subtree = base.cte(name="subtree", recursive=True)
+
+        # recursive step: all direct reports of any node in subtree
+        descendants = (
+            select(Employee.id)
+            .where(Employee.manager_id == subtree.c.id)
+        )
+
+        subtree = subtree.union_all(descendants)
+
+        # now check whether new_manager_id appears anywhere in this subtree
+        check = (
+            select(subtree.c.id)
+            .where(subtree.c.id == new_manager_id)
+            .limit(1)
+        )
+
+        result = self.db.execute(check).scalar_one_or_none()
+        # if result is not None, new_manager_id is in the subtree → invalid
+        return result is None
+
     # ============================================================================
     # Public Methods
     # ============================================================================
@@ -649,6 +704,69 @@ class EmployeeService:
                 new_state=new_dept_state,
                 changed_by_user_id=changed_by_user_id,
             )
+
+        return employee
+
+    def assign_manager(
+        self,
+        employee_id: UUID,
+        new_manager_id: UUID,
+        *,
+        changed_by_user_id: Optional[UUID] = None,
+    ) -> Optional[Employee]:
+        """
+        Assign a new manager to an employee.
+
+        Validation:
+        - Employee must exist
+        - New manager must exist
+        - Assignment must not create a circular dependency in the org tree
+        - Employee cannot become their own manager
+        - Cannot assign CEO's manager (CEO must have manager_id = None)
+
+        Creates an audit log entry tracking the change.
+        Does NOT commit - router is responsible for transaction management.
+
+        Returns updated employee or None if not found.
+        Raises ValueError if validation fails or circular dependency detected.
+        """
+        # Get existing employee
+        employee = self.get_employee(employee_id)
+        if not employee:
+            return None
+
+        # Validate new manager exists
+        self._validate_manager_exists(new_manager_id)
+
+        # Check for circular dependency
+        if not self._can_assign_manager(employee_id, new_manager_id):
+            raise ValueError(
+                f"Cannot assign manager: would create a circular dependency in the org tree. "
+                f"The new manager (or one of their reports) reports to this employee."
+            )
+
+        # Capture previous state
+        previous_state = {
+            "manager_id": str(employee.manager_id) if employee.manager_id else None,
+        }
+
+        # Update manager
+        employee.manager_id = new_manager_id
+
+        # Capture new state
+        new_state = {
+            "manager_id": str(employee.manager_id) if employee.manager_id else None,
+        }
+
+        # Create audit log entry
+        self.audit_service.create_audit_log(
+            entity_type=EntityType.EMPLOYEE,
+            entity_id=employee_id,
+            change_type=ChangeType.UPDATE,
+            previous_state=previous_state,
+            new_state=new_state,
+            changed_by_user_id=changed_by_user_id,
+        )
 
         return employee
 

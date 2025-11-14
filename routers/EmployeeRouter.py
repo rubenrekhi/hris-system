@@ -17,6 +17,7 @@ from schemas.EmployeeSchemas import (
     EmployeeUpdate,
     EmployeeDepartmentAssign,
     EmployeeTeamAssign,
+    EmployeeManagerAssign,
 )
 from core.dependencies import get_employee_service, require_roles, get_current_user, get_db, AnonymousUser
 from sqlalchemy.orm import Session
@@ -412,6 +413,53 @@ def assign_team(
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Failed to update team: {str(e)}")
+
+    return EmployeeDetail.model_validate(employee)
+
+
+@router.patch("/{employee_id}/manager", response_model=EmployeeDetail)
+def assign_manager(
+    employee_id: UUID,
+    assign_data: EmployeeManagerAssign,
+    user = Depends(require_roles("hr")),
+    employee_service: EmployeeService = Depends(get_employee_service),
+    db: Session = Depends(get_db),
+):
+    """
+    Assign a new manager to an employee.
+
+    Requires HR role.
+
+    Validation:
+    - Employee must exist
+    - New manager must exist
+    - Assignment must not create a circular dependency in the org tree
+    - Employee cannot become their own manager
+
+    The system uses a recursive CTE to detect and prevent circular dependencies
+    in the organizational hierarchy before allowing the assignment.
+
+    Updates are logged to the audit log with previous and new states.
+    """
+    try:
+        employee = employee_service.assign_manager(
+            employee_id,
+            assign_data.manager_id,
+            changed_by_user_id=user.id,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    if not employee:
+        raise HTTPException(status_code=404, detail="Employee not found")
+
+    # Commit the transaction (including audit log)
+    try:
+        db.commit()
+        db.refresh(employee)
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to update manager: {str(e)}")
 
     return EmployeeDetail.model_validate(employee)
 

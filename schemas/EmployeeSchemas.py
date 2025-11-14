@@ -59,6 +59,11 @@ class EmployeeTeamAssign(BaseModel):
     team_id: Optional[UUID] = Field(None, description="Team ID to assign (null to remove)")
 
 
+class EmployeeManagerAssign(BaseModel):
+    """Schema for assigning a new manager to an employee."""
+    manager_id: UUID = Field(..., description="Manager employee ID to assign")
+
+
 # ============================================================================
 # Query Schemas
 # ============================================================================
