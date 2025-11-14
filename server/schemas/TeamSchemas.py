@@ -89,3 +89,8 @@ class TeamDetail(BaseModel):
     created_at: datetime
     updated_at: datetime
     members: list[TeamMember] = Field(default_factory=list)
+
+    # Joined names for display
+    lead_name: Optional[str] = None
+    parent_team_name: Optional[str] = None
+    department_name: Optional[str] = None

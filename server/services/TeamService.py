@@ -351,6 +351,51 @@ class TeamService:
         query = select(Team).where(Team.id == team_id)
         return self.db.execute(query).scalar_one_or_none()
 
+    def get_team_with_details(self, team_id: UUID) -> Optional[dict]:
+        """
+        Get a single team by ID with lead, parent team, and department names.
+
+        Returns a dictionary with all team fields plus:
+        - lead_name: Name of the team lead employee (if assigned)
+        - parent_team_name: Name of the parent team (if assigned)
+        - department_name: Name of the department (if assigned)
+        - members: List of team member dictionaries
+
+        Returns None if team not found.
+        """
+        # Alias for the parent team join to get parent team's name
+        ParentTeam = Team.__table__.alias("parent_team")
+
+        query = (
+            select(
+                Team.id,
+                Team.name,
+                Team.lead_id,
+                Team.parent_team_id,
+                Team.department_id,
+                Team.created_at,
+                Team.updated_at,
+                Employee.name.label("lead_name"),
+                ParentTeam.c.name.label("parent_team_name"),
+                Department.name.label("department_name"),
+            )
+            .outerjoin(Employee, Team.lead_id == Employee.id)
+            .outerjoin(ParentTeam, Team.parent_team_id == ParentTeam.c.id)
+            .outerjoin(Department, Team.department_id == Department.id)
+            .where(Team.id == team_id)
+        )
+
+        result = self.db.execute(query).mappings().first()
+        if not result:
+            return None
+
+        # Convert to dict and fetch members
+        team_dict = dict(result)
+        members = self.get_team_members(team_id)
+        team_dict["members"] = members
+
+        return team_dict
+
     def get_team_members(self, team_id: UUID) -> List[Employee]:
         """
         Get all members of a specific team.
