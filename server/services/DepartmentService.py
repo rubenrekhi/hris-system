@@ -233,3 +233,31 @@ class DepartmentService:
         employees = self.db.execute(query).scalars().all()
 
         return list(employees), total
+
+    def list_departments(
+        self,
+        *,
+        limit: int = 25,
+        offset: int = 0,
+    ) -> Tuple[List[Department], int]:
+        """
+        List all departments with pagination.
+
+        Returns departments ordered alphabetically by name.
+        Returns tuple of (departments, total_count).
+        """
+        # Total count query
+        count_query = select(func.count(Department.id)).select_from(Department)
+        total = self.db.execute(count_query).scalar_one()
+
+        # Main query with ordering and pagination
+        query = (
+            select(Department)
+            .order_by(Department.name.asc(), Department.id.asc())
+            .limit(limit)
+            .offset(offset)
+        )
+
+        departments = self.db.execute(query).scalars().all()
+
+        return list(departments), total

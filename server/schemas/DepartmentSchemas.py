@@ -49,6 +49,14 @@ class DepartmentDetail(BaseModel):
     updated_at: datetime
 
 
+class DepartmentListItem(BaseModel):
+    """Schema for department list items (id and name only)."""
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    name: str
+
+
 class TeamListItem(BaseModel):
     """Schema for team list items (id and name only)."""
     model_config = ConfigDict(from_attributes=True)
@@ -76,6 +84,14 @@ class TeamListResponse(BaseModel):
 class EmployeeListResponse(BaseModel):
     """Paginated response for employee listing."""
     items: list[EmployeeListItem]
+    total: int
+    limit: int
+    offset: int
+
+
+class DepartmentListResponse(BaseModel):
+    """Paginated response for department listing."""
+    items: list[DepartmentListItem]
     total: int
     limit: int
     offset: int
