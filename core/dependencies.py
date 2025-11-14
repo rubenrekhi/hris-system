@@ -10,6 +10,7 @@ from core.database import SessionLocal
 from services.AuditLogService import AuditLogService
 from services.GlobalSearchService import GlobalSearchService
 from services.EmployeeService import EmployeeService
+from services.DepartmentService import DepartmentService
 
 
 # Temporary mock user class until auth is implemented
@@ -97,5 +98,16 @@ def get_employee_service(db: Session = Depends(get_db)) -> EmployeeService:
     The service is initialized with the database session.
     """
     return EmployeeService(db)
+
+
+# --------------------------------------------------------------------
+# Dependency: get_department_service()
+# --------------------------------------------------------------------
+def get_department_service(db: Session = Depends(get_db)) -> DepartmentService:
+    """
+    FastAPI dependency — returns a DepartmentService instance for the current request.
+    The service is initialized with the database session.
+    """
+    return DepartmentService(db)
 
 
