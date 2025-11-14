@@ -1,0 +1,167 @@
+/**
+ * Base API client for communicating with the FastAPI backend.
+ * Provides HTTP methods with automatic error handling and response parsing.
+ */
+
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+
+/**
+ * Custom error class for API errors with status code and response data.
+ */
+export class ApiError extends Error {
+  constructor(message, status, data) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+    this.data = data;
+  }
+}
+
+/**
+ * Handle API response, extracting data or throwing ApiError.
+ * @param {Response} response - Fetch API response object
+ * @returns {Promise<any>} Parsed JSON data or null for 204 responses
+ * @throws {ApiError} If response is not ok
+ */
+async function handleResponse(response) {
+  if (!response.ok) {
+    let errorData;
+    try {
+      errorData = await response.json();
+    } catch {
+      errorData = { detail: response.statusText };
+    }
+
+    const message = errorData.detail || `HTTP ${response.status}: ${response.statusText}`;
+    throw new ApiError(message, response.status, errorData);
+  }
+
+  // Handle empty responses (204 No Content, DELETE operations)
+  if (response.status === 204) {
+    return null;
+  }
+
+  // Parse and return JSON
+  return response.json();
+}
+
+/**
+ * Build query string from parameters object.
+ * Filters out undefined and null values.
+ * @param {Object} params - Query parameters
+ * @returns {URLSearchParams}
+ */
+function buildQueryParams(params = {}) {
+  const searchParams = new URLSearchParams();
+
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== '') {
+      searchParams.append(key, value);
+    }
+  });
+
+  return searchParams;
+}
+
+/**
+ * Base API client with HTTP methods.
+ */
+export const api = {
+  /**
+   * Perform a GET request.
+   * @param {string} endpoint - API endpoint (e.g., '/employees')
+   * @param {Object} params - Query parameters
+   * @returns {Promise<any>} Response data
+   */
+  get: async (endpoint, params = {}) => {
+    const queryString = buildQueryParams(params).toString();
+    const url = queryString
+      ? `${API_BASE_URL}${endpoint}?${queryString}`
+      : `${API_BASE_URL}${endpoint}`;
+
+    const response = await fetch(url);
+    return handleResponse(response);
+  },
+
+  /**
+   * Perform a POST request.
+   * @param {string} endpoint - API endpoint
+   * @param {Object} data - Request body data
+   * @returns {Promise<any>} Response data
+   */
+  post: async (endpoint, data) => {
+    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    return handleResponse(response);
+  },
+
+  /**
+   * Perform a PATCH request.
+   * @param {string} endpoint - API endpoint
+   * @param {Object} data - Request body data
+   * @returns {Promise<any>} Response data
+   */
+  patch: async (endpoint, data) => {
+    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    return handleResponse(response);
+  },
+
+  /**
+   * Perform a DELETE request.
+   * @param {string} endpoint - API endpoint
+   * @returns {Promise<any>} Response data (usually null)
+   */
+  delete: async (endpoint) => {
+    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+      method: 'DELETE',
+    });
+    return handleResponse(response);
+  },
+
+  /**
+   * Upload a file using multipart/form-data.
+   * @param {string} endpoint - API endpoint
+   * @param {FormData} formData - FormData object with file
+   * @returns {Promise<any>} Response data
+   */
+  upload: async (endpoint, formData) => {
+    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+      method: 'POST',
+      body: formData, // Don't set Content-Type, browser handles it with boundary
+    });
+    return handleResponse(response);
+  },
+
+  /**
+   * Download a file (blob).
+   * @param {string} endpoint - API endpoint
+   * @param {Object} params - Query parameters
+   * @returns {Promise<Blob>} File blob
+   * @throws {ApiError} If download fails
+   */
+  download: async (endpoint, params = {}) => {
+    const queryString = buildQueryParams(params).toString();
+    const url = queryString
+      ? `${API_BASE_URL}${endpoint}?${queryString}`
+      : `${API_BASE_URL}${endpoint}`;
+
+    const response = await fetch(url);
+
+    if (!response.ok) {
+      throw new ApiError(
+        `Download failed: ${response.statusText}`,
+        response.status,
+        null
+      );
+    }
+
+    return response.blob();
+  },
+};
