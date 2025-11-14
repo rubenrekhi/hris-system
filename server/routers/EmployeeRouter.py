@@ -260,8 +260,9 @@ def get_employee(
     - Employment: hired_on, salary, status
     - Relationships: department_id, manager_id, team_id
     - Metadata: created_at, updated_at
+    - Related names: department_name, team_name, manager_name
     """
-    employee = employee_service.get_employee(employee_id)
+    employee = employee_service.get_employee_with_details(employee_id)
 
     if not employee:
         raise HTTPException(status_code=404, detail="Employee not found")

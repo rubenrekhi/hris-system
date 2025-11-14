@@ -260,6 +260,15 @@ class EmployeeService:
     # Public Methods
     # ============================================================================
 
+    def _get_employee_orm(self, employee_id: UUID) -> Optional[Employee]:
+        """
+        Internal helper to get Employee ORM object for modifications.
+
+        Returns None if not found.
+        """
+        query = select(Employee).where(Employee.id == employee_id)
+        return self.db.execute(query).scalar_one_or_none()
+
     def list_employees(
         self,
         *,
@@ -272,7 +281,7 @@ class EmployeeService:
         email: Optional[str] = None,
         limit: int = 25,
         offset: int = 0,
-    ) -> Tuple[List[Employee], int]:
+    ) -> Tuple[List[dict], int]:
         """
         List employees with optional filters, search, and pagination.
 
@@ -280,7 +289,8 @@ class EmployeeService:
         Supports filtering by team, department, status, and salary range.
         Supports searching by name or email (case-insensitive ILIKE).
 
-        Returns tuple of (employees, total_count)
+        Returns tuple of (employee_dicts, total_count).
+        Each employee dict includes department_name and team_name from joins.
         """
         # Build filters
         filters = []
@@ -316,8 +326,24 @@ class EmployeeService:
             count_query = count_query.where(and_(*filters))
         total = self.db.execute(count_query).scalar_one()
 
-        # Main query with ordering and pagination
-        query = select(Employee)
+        # Main query with joins to get department and team names
+        query = (
+            select(
+                Employee.id,
+                Employee.name,
+                Employee.email,
+                Employee.title,
+                Employee.status,
+                Employee.salary,
+                Employee.department_id,
+                Employee.team_id,
+                Department.name.label("department_name"),
+                Team.name.label("team_name"),
+            )
+            .outerjoin(Department, Employee.department_id == Department.id)
+            .outerjoin(Team, Employee.team_id == Team.id)
+        )
+
         if filters:
             query = query.where(and_(*filters))
 
@@ -327,7 +353,9 @@ class EmployeeService:
         # Pagination
         query = query.limit(limit).offset(offset)
 
-        employees = self.db.execute(query).scalars().all()
+        # Execute and convert to dictionaries
+        result = self.db.execute(query).mappings().all()
+        employees = [dict(row) for row in result]
 
         return employees, total
 
@@ -335,10 +363,50 @@ class EmployeeService:
         """
         Get a single employee by ID.
 
-        Returns None if not found.
+        Returns the Employee ORM object or None if not found.
         """
-        query = select(Employee).where(Employee.id == employee_id)
-        return self.db.execute(query).scalar_one_or_none()
+        return self._get_employee_orm(employee_id)
+
+    def get_employee_with_details(self, employee_id: UUID) -> Optional[dict]:
+        """
+        Get a single employee by ID with department, team, and manager names.
+
+        Returns a dictionary with all employee fields plus:
+        - department_name: Name of the employee's department (if assigned)
+        - team_name: Name of the employee's team (if assigned)
+        - manager_name: Name of the employee's manager (if assigned)
+
+        Returns None if employee not found.
+        """
+        # Alias for the manager join to get manager's name
+        Manager = Employee.__table__.alias("manager")
+
+        query = (
+            select(
+                Employee.id,
+                Employee.name,
+                Employee.title,
+                Employee.email,
+                Employee.hired_on,
+                Employee.salary,
+                Employee.status,
+                Employee.department_id,
+                Employee.manager_id,
+                Employee.team_id,
+                Employee.created_at,
+                Employee.updated_at,
+                Department.name.label("department_name"),
+                Team.name.label("team_name"),
+                Manager.c.name.label("manager_name"),
+            )
+            .outerjoin(Department, Employee.department_id == Department.id)
+            .outerjoin(Team, Employee.team_id == Team.id)
+            .outerjoin(Manager, Employee.manager_id == Manager.c.id)
+            .where(Employee.id == employee_id)
+        )
+
+        result = self.db.execute(query).mappings().first()
+        return dict(result) if result else None
 
     def get_ceo(self) -> Optional[Employee]:
         """
@@ -464,7 +532,7 @@ class EmployeeService:
         Returns updated employee or None if not found.
         """
         # Get existing employee
-        employee = self.get_employee(employee_id)
+        employee = self._get_employee_orm(employee_id)
         if not employee:
             return None
 
@@ -540,7 +608,7 @@ class EmployeeService:
         Raises ValueError if validation fails.
         """
         # Get existing employee
-        employee = self.get_employee(employee_id)
+        employee = self._get_employee_orm(employee_id)
         if not employee:
             return None
 
@@ -617,7 +685,7 @@ class EmployeeService:
         Raises ValueError if validation fails.
         """
         # Get existing employee
-        employee = self.get_employee(employee_id)
+        employee = self._get_employee_orm(employee_id)
         if not employee:
             return None
 
@@ -731,7 +799,7 @@ class EmployeeService:
         Raises ValueError if validation fails or circular dependency detected.
         """
         # Get existing employee
-        employee = self.get_employee(employee_id)
+        employee = self._get_employee_orm(employee_id)
         if not employee:
             return None
 
@@ -794,7 +862,7 @@ class EmployeeService:
         Raises ValueError if employee is CEO (has no manager).
         """
         # Get existing employee
-        employee = self.get_employee(employee_id)
+        employee = self._get_employee_orm(employee_id)
         if not employee:
             return None
 
@@ -977,7 +1045,7 @@ class EmployeeService:
             raise ValueError("No current CEO exists")
 
         # Get employee to promote
-        employee = self.get_employee(employee_id)
+        employee = self._get_employee_orm(employee_id)
         if not employee:
             raise ValueError(f"Employee with ID {employee_id} does not exist")
 

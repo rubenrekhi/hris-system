@@ -95,11 +95,18 @@ class EmployeeListQuery(BaseModel):
 # ============================================================================
 
 class EmployeeListItem(BaseModel):
-    """Schema for employee list items."""
+    """Schema for employee list items with essential display fields."""
     model_config = ConfigDict(from_attributes=True)
 
     id: UUID
     name: str
+    email: str
+    title: Optional[str]
+    status: EmployeeStatus
+    department_id: Optional[UUID] = None
+    team_id: Optional[UUID] = None
+    department_name: Optional[str] = None
+    team_name: Optional[str] = None
 
 
 class EmployeeListResponse(BaseModel):
@@ -126,3 +133,8 @@ class EmployeeDetail(BaseModel):
     team_id: Optional[UUID]
     created_at: datetime
     updated_at: datetime
+
+    # Joined names for display
+    department_name: Optional[str] = None
+    team_name: Optional[str] = None
+    manager_name: Optional[str] = None
