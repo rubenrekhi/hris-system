@@ -11,6 +11,7 @@ from services.AuditLogService import AuditLogService
 from services.GlobalSearchService import GlobalSearchService
 from services.EmployeeService import EmployeeService
 from services.DepartmentService import DepartmentService
+from services.TeamService import TeamService
 
 
 # Temporary mock user class until auth is implemented
@@ -109,5 +110,16 @@ def get_department_service(db: Session = Depends(get_db)) -> DepartmentService:
     The service is initialized with the database session.
     """
     return DepartmentService(db)
+
+
+# --------------------------------------------------------------------
+# Dependency: get_team_service()
+# --------------------------------------------------------------------
+def get_team_service(db: Session = Depends(get_db)) -> TeamService:
+    """
+    FastAPI dependency — returns a TeamService instance for the current request.
+    The service is initialized with the database session.
+    """
+    return TeamService(db)
 
 
