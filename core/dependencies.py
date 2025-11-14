@@ -8,6 +8,8 @@ from fastapi import Depends
 from sqlalchemy.orm import Session
 from core.database import SessionLocal
 from services.AuditLogService import AuditLogService
+from services.GlobalSearchService import GlobalSearchService
+from services.EmployeeService import EmployeeService
 
 
 # Temporary mock user class until auth is implemented
@@ -73,5 +75,27 @@ def get_audit_log_service(db: Session = Depends(get_db)) -> AuditLogService:
     The service is initialized with the database session.
     """
     return AuditLogService(db)
+
+
+# --------------------------------------------------------------------
+# Dependency: get_global_search_service()
+# --------------------------------------------------------------------
+def get_global_search_service(db: Session = Depends(get_db)) -> GlobalSearchService:
+    """
+    FastAPI dependency — returns a GlobalSearchService instance for the current request.
+    The service is initialized with the database session.
+    """
+    return GlobalSearchService(db)
+
+
+# --------------------------------------------------------------------
+# Dependency: get_employee_service()
+# --------------------------------------------------------------------
+def get_employee_service(db: Session = Depends(get_db)) -> EmployeeService:
+    """
+    FastAPI dependency — returns an EmployeeService instance for the current request.
+    The service is initialized with the database session.
+    """
+    return EmployeeService(db)
 
 
