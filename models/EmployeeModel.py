@@ -35,7 +35,7 @@ class Employee(BaseModel):
     department = relationship("Department", back_populates="employees")
     manager = relationship("Employee", remote_side="Employee.id", back_populates="direct_reports", foreign_keys=[manager_id])
     direct_reports = relationship("Employee", back_populates="manager", foreign_keys=[manager_id], cascade="save-update", passive_deletes=False)
-    team = relationship("Team", back_populates="members")
+    team = relationship("Team", back_populates="members", foreign_keys=[team_id])
     user = relationship("User", back_populates="employee", uselist=False)
 
     __table_args__ = (
