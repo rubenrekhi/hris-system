@@ -96,6 +96,189 @@ class TestCreateAuditLog:
         assert len(result) == 0  # Should be empty after rollback
 
 
+class TestBulkCreateAuditLogs:
+    """Tests for AuditLogService.bulk_create_audit_logs()"""
+
+    def test_bulk_create_audit_logs_success(self, db_session: Session):
+        """Should create multiple audit logs with identical fields."""
+        # Arrange
+        service = AuditLogService(db_session)
+        entity_ids = [uuid4(), uuid4(), uuid4()]
+        user_id = uuid4()
+        previous_state = {"manager_id": str(uuid4())}
+        new_state = {"manager_id": str(uuid4())}
+
+        # Act
+        audit_logs = service.bulk_create_audit_logs(
+            entity_type=EntityType.EMPLOYEE,
+            entity_ids=entity_ids,
+            change_type=ChangeType.UPDATE,
+            previous_state=previous_state,
+            new_state=new_state,
+            changed_by_user_id=user_id,
+        )
+        db_session.flush()  # Flush to generate IDs
+
+        # Assert
+        assert len(audit_logs) == 3
+        for i, audit_log in enumerate(audit_logs):
+            assert audit_log.id is not None
+            assert audit_log.entity_type == EntityType.EMPLOYEE
+            assert audit_log.entity_id == entity_ids[i]
+            assert audit_log.change_type == ChangeType.UPDATE
+            assert audit_log.previous_state == previous_state
+            assert audit_log.new_state == new_state
+            assert audit_log.changed_by_user_id == user_id
+
+    def test_bulk_create_audit_logs_minimal_fields(self, db_session: Session):
+        """Should create bulk audit logs with only required fields."""
+        # Arrange
+        service = AuditLogService(db_session)
+        entity_ids = [uuid4(), uuid4()]
+
+        # Act
+        audit_logs = service.bulk_create_audit_logs(
+            entity_type=EntityType.DEPARTMENT,
+            entity_ids=entity_ids,
+            change_type=ChangeType.CREATE,
+        )
+        db_session.flush()
+
+        # Assert
+        assert len(audit_logs) == 2
+        for i, audit_log in enumerate(audit_logs):
+            assert audit_log.id is not None
+            assert audit_log.entity_type == EntityType.DEPARTMENT
+            assert audit_log.entity_id == entity_ids[i]
+            assert audit_log.change_type == ChangeType.CREATE
+            assert audit_log.previous_state is None
+            assert audit_log.new_state is None
+            assert audit_log.changed_by_user_id is None
+
+    def test_bulk_create_audit_logs_empty_list(self, db_session: Session):
+        """Should return empty list when entity_ids is empty."""
+        # Arrange
+        service = AuditLogService(db_session)
+        entity_ids = []
+
+        # Act
+        audit_logs = service.bulk_create_audit_logs(
+            entity_type=EntityType.EMPLOYEE,
+            entity_ids=entity_ids,
+            change_type=ChangeType.UPDATE,
+        )
+
+        # Assert
+        assert audit_logs == []
+        assert len(audit_logs) == 0
+
+    def test_bulk_create_audit_logs_single_entity(self, db_session: Session):
+        """Should work correctly with a single entity ID."""
+        # Arrange
+        service = AuditLogService(db_session)
+        entity_ids = [uuid4()]
+        user_id = uuid4()
+
+        # Act
+        audit_logs = service.bulk_create_audit_logs(
+            entity_type=EntityType.TEAM,
+            entity_ids=entity_ids,
+            change_type=ChangeType.DELETE,
+            previous_state={"name": "Team A"},
+            changed_by_user_id=user_id,
+        )
+        db_session.flush()
+
+        # Assert
+        assert len(audit_logs) == 1
+        assert audit_logs[0].entity_id == entity_ids[0]
+        assert audit_logs[0].entity_type == EntityType.TEAM
+        assert audit_logs[0].change_type == ChangeType.DELETE
+        assert audit_logs[0].previous_state == {"name": "Team A"}
+        assert audit_logs[0].changed_by_user_id == user_id
+
+    def test_bulk_create_audit_logs_large_batch(self, db_session: Session):
+        """Should efficiently create large batch of audit logs."""
+        # Arrange
+        service = AuditLogService(db_session)
+        entity_ids = [uuid4() for _ in range(100)]
+        user_id = uuid4()
+
+        # Act
+        audit_logs = service.bulk_create_audit_logs(
+            entity_type=EntityType.EMPLOYEE,
+            entity_ids=entity_ids,
+            change_type=ChangeType.UPDATE,
+            previous_state={"status": "ACTIVE"},
+            new_state={"status": "ON_LEAVE"},
+            changed_by_user_id=user_id,
+        )
+        db_session.commit()
+
+        # Assert
+        assert len(audit_logs) == 100
+        # Verify all were persisted
+        persisted_logs = db_session.query(AuditLog).filter(
+            AuditLog.changed_by_user_id == user_id
+        ).all()
+        assert len(persisted_logs) == 100
+
+    def test_bulk_create_audit_logs_does_not_commit(self, db_session: Session):
+        """Should add to session but NOT commit (router's responsibility)."""
+        # Arrange
+        service = AuditLogService(db_session)
+        entity_ids = [uuid4(), uuid4()]
+
+        # Act
+        service.bulk_create_audit_logs(
+            entity_type=EntityType.USER,
+            entity_ids=entity_ids,
+            change_type=ChangeType.UPDATE,
+        )
+
+        # Assert - rollback and verify nothing persisted
+        db_session.rollback()
+        result = db_session.query(AuditLog).all()
+        assert len(result) == 0  # Should be empty after rollback
+
+    def test_bulk_create_audit_logs_unique_ids(self, db_session: Session):
+        """Should create logs with unique IDs even when created in bulk."""
+        # Arrange
+        service = AuditLogService(db_session)
+        entity_ids = [uuid4() for _ in range(10)]
+
+        # Act
+        audit_logs = service.bulk_create_audit_logs(
+            entity_type=EntityType.EMPLOYEE,
+            entity_ids=entity_ids,
+            change_type=ChangeType.CREATE,
+        )
+        db_session.flush()
+
+        # Assert
+        log_ids = [log.id for log in audit_logs]
+        assert len(log_ids) == len(set(log_ids))  # All IDs are unique
+
+    def test_bulk_create_audit_logs_returns_all_objects(self, db_session: Session):
+        """Should return all created AuditLog objects in same order."""
+        # Arrange
+        service = AuditLogService(db_session)
+        entity_ids = [uuid4(), uuid4(), uuid4(), uuid4(), uuid4()]
+
+        # Act
+        audit_logs = service.bulk_create_audit_logs(
+            entity_type=EntityType.DEPARTMENT,
+            entity_ids=entity_ids,
+            change_type=ChangeType.UPDATE,
+        )
+        db_session.flush()
+
+        # Assert
+        assert len(audit_logs) == len(entity_ids)
+        for i, audit_log in enumerate(audit_logs):
+            assert audit_log.entity_id == entity_ids[i]
+
+
 class TestGetAuditLog:
     """Tests for AuditLogService.get_audit_log()"""
 
