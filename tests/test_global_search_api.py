@@ -359,9 +359,6 @@ class TestGlobalSearchEndpoint:
 
     def test_search_numeric_query(self, client, sample_search_data):
         """Should handle numeric characters in query."""
-        # Arrange
-        test_db_session = sample_search_data
-
         # Act
         response = client.get("/search?q=123")
 
