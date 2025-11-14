@@ -21,6 +21,7 @@ class ChangeType(str, Enum):
     CREATE = "CREATE"
     UPDATE = "UPDATE"
     DELETE = "DELETE"
+    BULK_UPDATE = "BULK_UPDATE"
 
 class AuditLog(BaseModel):
     __tablename__ = "audit_log"
