@@ -45,6 +45,58 @@ class AuditLogService:
         self.db.add(row)
         return row
 
+    def bulk_create_audit_logs(
+        self,
+        *,
+        entity_type: EntityType,
+        entity_ids: List[UUID],
+        change_type: ChangeType,
+        previous_state: Optional[dict[str, Any]] = None,
+        new_state: Optional[dict[str, Any]] = None,
+        changed_by_user_id: Optional[UUID] = None,
+    ) -> List[AuditLog]:
+        """
+        Bulk create audit logs for multiple entities with identical fields.
+
+        This is more efficient than calling create_audit_log in a loop as it:
+        - Creates all objects in memory first
+        - Adds them to the session in bulk using add_all()
+        - Reduces database round-trips
+
+        Does NOT commit - router is responsible for transaction management.
+
+        Args:
+            entity_type: The type of entities being logged
+            entity_ids: List of entity IDs to create audit logs for
+            change_type: The type of change (CREATE, UPDATE, DELETE)
+            previous_state: Previous state dict (same for all logs)
+            new_state: New state dict (same for all logs)
+            changed_by_user_id: User who made the change
+
+        Returns:
+            List of created AuditLog objects
+        """
+        if not entity_ids:
+            return []
+
+        # Create all audit log objects in memory
+        audit_logs = [
+            AuditLog(
+                entity_type=entity_type,
+                entity_id=entity_id,
+                change_type=change_type,
+                previous_state=previous_state,
+                new_state=new_state,
+                changed_by_user_id=changed_by_user_id,
+            )
+            for entity_id in entity_ids
+        ]
+
+        # Bulk add all objects to the session
+        self.db.add_all(audit_logs)
+
+        return audit_logs
+
     def get_audit_log(self, log_id: UUID) -> Optional[AuditLog]:
         """
         Retrieve a single audit log by ID.
