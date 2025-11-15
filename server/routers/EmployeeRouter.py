@@ -5,7 +5,7 @@ API routes for employee records and information management.
 """
 
 from uuid import UUID
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from services.EmployeeService import EmployeeService
 from schemas.EmployeeSchemas import (
     EmployeeListQuery,
@@ -67,6 +67,39 @@ def list_employees(
         total=total,
         limit=query.limit,
         offset=query.offset,
+    )
+
+
+@router.get("/unassigned", response_model=EmployeeListResponse)
+def list_unassigned_employees(
+    limit: int = Query(25, ge=1, le=100, description="Number of results per page"),
+    offset: int = Query(0, ge=0, description="Number of results to skip"),
+    user = Depends(require_roles("member")),
+    employee_service: EmployeeService = Depends(get_employee_service),
+):
+    """
+    List unassigned employees.
+
+    Returns employees that are:
+    - Not assigned to any department (department_id IS NULL)
+    - Not assigned to any team (team_id IS NULL)
+
+    Employees are ordered alphabetically by name.
+
+    Pagination:
+    - limit: Number of results per page (1-100, default 25)
+    - offset: Number of results to skip (default 0)
+    """
+    employees, total = employee_service.list_unassigned_employees(
+        limit=limit,
+        offset=offset,
+    )
+
+    return EmployeeListResponse(
+        items=[EmployeeListItem.model_validate(emp) for emp in employees],
+        total=total,
+        limit=limit,
+        offset=offset,
     )
 
 

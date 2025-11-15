@@ -359,6 +359,63 @@ class EmployeeService:
 
         return employees, total
 
+    def list_unassigned_employees(
+        self,
+        *,
+        limit: int = 25,
+        offset: int = 0,
+    ) -> Tuple[List[dict], int]:
+        """
+        List employees with no department and no team assignment.
+
+        Returns employees where:
+        - department_id IS NULL (not assigned to any department)
+        - team_id IS NULL (not assigned to any team)
+
+        Employees are ordered alphabetically by name.
+        Returns tuple of (employee_dicts, total_count).
+        """
+        # Build filters for unassigned employees
+        filters = [
+            Employee.department_id.is_(None),
+            Employee.team_id.is_(None),
+        ]
+
+        # Total count query
+        count_query = select(func.count(Employee.id)).select_from(Employee).where(and_(*filters))
+        total = self.db.execute(count_query).scalar_one()
+
+        # Main query with joins to get department and team names (both should be None)
+        query = (
+            select(
+                Employee.id,
+                Employee.name,
+                Employee.email,
+                Employee.title,
+                Employee.status,
+                Employee.salary,
+                Employee.department_id,
+                Employee.team_id,
+                Department.name.label("department_name"),
+                Team.name.label("team_name"),
+            )
+            .outerjoin(Department, Employee.department_id == Department.id)
+            .outerjoin(Team, Employee.team_id == Team.id)
+            .where(and_(*filters))
+        )
+
+        # Order alphabetically by name
+        query = query.order_by(Employee.name.asc(), Employee.id.asc())
+
+        # Pagination
+        query = query.limit(limit).offset(offset)
+
+        # Execute and convert to dictionaries
+        result = self.db.execute(query).mappings().all()
+        employees = [dict(row) for row in result]
+
+        return employees, total
+
     def get_employee(self, employee_id: UUID) -> Optional[Employee]:
         """
         Get a single employee by ID.
