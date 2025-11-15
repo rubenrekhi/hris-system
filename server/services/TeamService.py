@@ -342,6 +342,45 @@ class TeamService:
 
         return teams, total
 
+    def list_unassigned_root_teams(
+        self,
+        *,
+        limit: int = 25,
+        offset: int = 0,
+    ) -> Tuple[List[Team], int]:
+        """
+        List root-level teams with no department assignment.
+
+        Returns teams where:
+        - department_id IS NULL (not assigned to any department)
+        - parent_team_id IS NULL (root-level, no parent)
+
+        Teams are ordered alphabetically by name.
+        Returns tuple of (teams, total_count)
+        """
+        # Build filters for unassigned root teams
+        filters = [
+            Team.department_id.is_(None),
+            Team.parent_team_id.is_(None),
+        ]
+
+        # Total count query
+        count_query = select(func.count(Team.id)).select_from(Team).where(and_(*filters))
+        total = self.db.execute(count_query).scalar_one()
+
+        # Main query with ordering and pagination
+        query = select(Team).where(and_(*filters))
+
+        # Order alphabetically by name
+        query = query.order_by(Team.name.asc(), Team.id.asc())
+
+        # Pagination
+        query = query.limit(limit).offset(offset)
+
+        teams = self.db.execute(query).scalars().all()
+
+        return teams, total
+
     def get_team(self, team_id: UUID) -> Optional[Team]:
         """
         Get a single team by ID.
