@@ -8,7 +8,7 @@ from __future__ import annotations
 from typing import List, Tuple, Optional
 from uuid import UUID
 from sqlalchemy.orm import Session
-from sqlalchemy import select, func
+from sqlalchemy import select, func, and_
 from models.DepartmentModel import Department
 from models.TeamModel import Team
 from models.EmployeeModel import Employee
@@ -233,6 +233,49 @@ class DepartmentService:
         employees = self.db.execute(query).scalars().all()
 
         return list(employees), total
+
+    def list_department_root_teams(
+        self,
+        department_id: UUID,
+        *,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> Tuple[List[Team], int]:
+        """
+        List root-level teams in a department (teams with no parent team).
+
+        Returns teams ordered alphabetically by name.
+        Returns tuple of (teams, total_count).
+        """
+        # Count root teams in department
+        count_query = (
+            select(func.count(Team.id))
+            .select_from(Team)
+            .where(
+                and_(
+                    Team.department_id == department_id,
+                    Team.parent_team_id.is_(None)
+                )
+            )
+        )
+        total = self.db.execute(count_query).scalar_one()
+
+        # Fetch root teams
+        query = (
+            select(Team)
+            .where(
+                and_(
+                    Team.department_id == department_id,
+                    Team.parent_team_id.is_(None)
+                )
+            )
+            .order_by(Team.name.asc(), Team.id.asc())
+            .limit(limit)
+            .offset(offset)
+        )
+
+        teams = self.db.execute(query).scalars().all()
+        return list(teams), total
 
     def list_departments(
         self,

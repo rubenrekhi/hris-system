@@ -186,6 +186,40 @@ def delete_department(
     return None
 
 
+@router.get("/{department_id}/teams/root", response_model=TeamListResponse)
+def list_department_root_teams(
+    department_id: UUID,
+    query: PaginationQuery = Depends(),
+    user = Depends(require_roles("member")),
+    department_service: DepartmentService = Depends(get_department_service),
+):
+    """
+    List root-level teams in a department.
+
+    Returns teams that have no parent team (parent_team_id IS NULL)
+    in the specified department, ordered alphabetically by name.
+
+    Pagination:
+    - limit: Number of results per page (1-100, default 100)
+    - offset: Number of results to skip (default 0)
+    """
+    try:
+        teams, total = department_service.list_department_root_teams(
+            department_id,
+            limit=query.limit,
+            offset=query.offset,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+    return TeamListResponse(
+        items=[TeamListItem.model_validate(team) for team in teams],
+        total=total,
+        limit=query.limit,
+        offset=query.offset,
+    )
+
+
 @router.get("/{department_id}/teams", response_model=TeamListResponse)
 def list_department_teams(
     department_id: UUID,
