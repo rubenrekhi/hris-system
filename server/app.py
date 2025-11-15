@@ -62,7 +62,7 @@ Human Resources Information System API for managing employees, departments, team
 
 origins = [
     "http://localhost:5173",       # local React dev
-    "https://deployed-frontend.vercel.app",  # deployed frontend (mock)
+    "https://hric-fe-weld.vercel.app",  # deployed frontend (mock)
 ]
 
 app.add_middleware(
