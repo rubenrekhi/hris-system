@@ -24,6 +24,8 @@ import AssignmentIcon from '@mui/icons-material/Assignment';
 import BusinessIcon from '@mui/icons-material/Business';
 import BarChartIcon from '@mui/icons-material/BarChart';
 import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
+import { cache } from '@/utils/cache';
+import { departmentService, teamService, employeeService, auditLogService } from '@/services';
 
 /**
  * Header component with top navigation bar.
@@ -41,7 +43,7 @@ export default function Header() {
     { label: 'Employee Directory', path: '/employees', icon: <GroupIcon /> },
     { label: 'Org Chart', path: '/org-chart', icon: <AccountTreeIcon /> },
     { label: 'Audits', path: '/audits', icon: <AssignmentIcon /> },
-    { label: 'Teams', path: '/teams', icon: <BusinessIcon /> },
+    { label: 'Departments', path: '/teams', icon: <BusinessIcon /> },
     { label: 'Reports', path: '/reports', icon: <BarChartIcon /> },
     { label: 'Management', path: '/management', icon: <AdminPanelSettingsIcon /> },
   ];
@@ -52,6 +54,57 @@ export default function Header() {
 
   const handleDrawerClose = () => {
     setMobileMenuOpen(false);
+  };
+
+  /**
+   * Prefetch data for a route on hover to reduce loading time.
+   * Only prefetches if data is not already cached.
+   */
+  const handlePrefetch = async (path) => {
+    try {
+      // Prefetch for Employee Directory page
+      if (path === '/employees') {
+        // Prefetch departments and teams for filter dropdowns
+        if (!cache.has('departments')) {
+          const deptData = await departmentService.listDepartments({ limit: 100 });
+          cache.set('departments', deptData);
+        }
+        if (!cache.has('teams')) {
+          const teamData = await teamService.listTeams({ limit: 100 });
+          cache.set('teams', teamData);
+        }
+        // Prefetch first page of employees (no filters)
+        if (!cache.has('employees_page_0')) {
+          const employeesData = await employeeService.listEmployees({ limit: 25, offset: 0 });
+          cache.set('employees_page_0', employeesData);
+        }
+      }
+
+      // Prefetch for Departments page
+      if (path === '/teams') {
+        // Prefetch departments for department cards
+        if (!cache.has('departments')) {
+          const deptData = await departmentService.listDepartments({ limit: 100 });
+          cache.set('departments', deptData);
+        }
+      }
+
+      // Prefetch for Audits page
+      if (path === '/audits') {
+        // Prefetch first page of audit logs (no filters, newest first)
+        if (!cache.has('audit_logs_page_0')) {
+          const auditLogsData = await auditLogService.listAuditLogs({
+            limit: 25,
+            offset: 0,
+            order: 'desc',
+          });
+          cache.set('audit_logs_page_0', auditLogsData);
+        }
+      }
+    } catch (err) {
+      // Silently fail - prefetch is optional, don't break navigation
+      console.debug('Prefetch failed for', path, err);
+    }
   };
 
   return (
@@ -94,6 +147,7 @@ export default function Header() {
                   component={Link}
                   to={item.path}
                   startIcon={item.icon}
+                  onMouseEnter={() => handlePrefetch(item.path)}
                   sx={{
                     color: isActive ? 'primary.main' : 'text.secondary',
                     fontWeight: isActive ? 600 : 400,
@@ -146,6 +200,7 @@ export default function Header() {
                     component={Link}
                     to={item.path}
                     onClick={handleDrawerClose}
+                    onMouseEnter={() => handlePrefetch(item.path)}
                     selected={isActive}
                     sx={{
                       '&.Mui-selected': {
