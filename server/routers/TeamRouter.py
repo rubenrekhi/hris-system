@@ -5,7 +5,7 @@ API routes for team management and operations.
 """
 
 from uuid import UUID
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from services.TeamService import TeamService
 from schemas.TeamSchemas import (
     TeamListQuery,
@@ -58,6 +58,39 @@ def list_teams(
         total=total,
         limit=query.limit,
         offset=query.offset,
+    )
+
+
+@router.get("/unassigned", response_model=TeamListResponse)
+def list_unassigned_root_teams(
+    limit: int = Query(25, ge=1, le=100, description="Number of results per page"),
+    offset: int = Query(0, ge=0, description="Number of results to skip"),
+    user = Depends(require_roles("member")),
+    team_service: TeamService = Depends(get_team_service),
+):
+    """
+    List unassigned root-level teams.
+
+    Returns teams that are:
+    - Not assigned to any department (department_id IS NULL)
+    - Root-level with no parent team (parent_team_id IS NULL)
+
+    Teams are ordered alphabetically by name.
+
+    Pagination:
+    - limit: Number of results per page (1-100, default 25)
+    - offset: Number of results to skip (default 0)
+    """
+    teams, total = team_service.list_unassigned_root_teams(
+        limit=limit,
+        offset=offset,
+    )
+
+    return TeamListResponse(
+        items=[TeamListItem.model_validate(team) for team in teams],
+        total=total,
+        limit=limit,
+        offset=offset,
     )
 
 
