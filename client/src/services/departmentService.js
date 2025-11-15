@@ -17,6 +17,17 @@ export const departmentService = {
   },
 
   /**
+   * List all departments with pagination.
+   * @param {Object} pagination - Pagination options
+   * @param {number} [pagination.limit=25] - Results per page
+   * @param {number} [pagination.offset=0] - Pagination offset
+   * @returns {Promise<{items: Array, total: number, limit: number, offset: number}>}
+   */
+  listDepartments: async (pagination = {}) => {
+    return api.get('/departments', pagination);
+  },
+
+  /**
    * Get a single department by ID.
    * @param {string} id - Department ID (UUID)
    * @returns {Promise<Object>} Department details
@@ -55,6 +66,18 @@ export const departmentService = {
    */
   listDepartmentTeams: async (departmentId, pagination = {}) => {
     return api.get(`/departments/${departmentId}/teams`, pagination);
+  },
+
+  /**
+   * List root-level teams in a department (teams with no parent team).
+   * @param {string} departmentId - Department ID
+   * @param {Object} pagination - Pagination options
+   * @param {number} [pagination.limit=100] - Results per page
+   * @param {number} [pagination.offset=0] - Pagination offset
+   * @returns {Promise<{items: Array, total: number, limit: number, offset: number}>}
+   */
+  listDepartmentRootTeams: async (departmentId, pagination = {}) => {
+    return api.get(`/departments/${departmentId}/teams/root`, pagination);
   },
 
   /**
