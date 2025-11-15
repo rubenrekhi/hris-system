@@ -21,6 +21,17 @@ export const teamService = {
   },
 
   /**
+   * List unassigned root-level teams (no department, no parent).
+   * @param {Object} filters - Filter options
+   * @param {number} [filters.limit=25] - Results per page
+   * @param {number} [filters.offset=0] - Pagination offset
+   * @returns {Promise<{items: Array, total: number, limit: number, offset: number}>}
+   */
+  listUnassignedTeams: async (filters = {}) => {
+    return api.get('/teams/unassigned', filters);
+  },
+
+  /**
    * Get a single team by ID with members.
    * @param {string} id - Team ID (UUID)
    * @returns {Promise<Object>} Team details with members

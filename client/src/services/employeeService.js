@@ -25,6 +25,17 @@ export const employeeService = {
   },
 
   /**
+   * List unassigned employees (no department, no team).
+   * @param {Object} filters - Filter options
+   * @param {number} [filters.limit=25] - Results per page
+   * @param {number} [filters.offset=0] - Pagination offset
+   * @returns {Promise<{items: Array, total: number, limit: number, offset: number}>}
+   */
+  listUnassignedEmployees: async (filters = {}) => {
+    return api.get('/employees/unassigned', filters);
+  },
+
+  /**
    * Get a single employee by ID.
    * @param {string} id - Employee ID (UUID)
    * @returns {Promise<Object>} Employee details
