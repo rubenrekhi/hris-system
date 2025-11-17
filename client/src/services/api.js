@@ -45,12 +45,19 @@ function formatErrorMessage(detail) {
 
 /**
  * Handle API response, extracting data or throwing ApiError.
+ * Includes special handling for 401 (redirect to login).
  * @param {Response} response - Fetch API response object
  * @returns {Promise<any>} Parsed JSON data or null for 204 responses
  * @throws {ApiError} If response is not ok
  */
 async function handleResponse(response) {
   if (!response.ok) {
+    // Handle 401 Unauthorized - redirect to backend login
+    if (response.status === 401) {
+      window.location.href = `${API_BASE_URL}/auth/login`;
+      throw new ApiError('Authentication required', 401, {});
+    }
+
     let errorData;
     try {
       errorData = await response.json();
@@ -109,7 +116,9 @@ export const api = {
       ? `${API_BASE_URL}${endpoint}?${queryString}`
       : `${API_BASE_URL}${endpoint}`;
 
-    const response = await fetch(url);
+    const response = await fetch(url, {
+      credentials: 'include', // Include cookies for authentication
+    });
     return handleResponse(response);
   },
 
@@ -123,6 +132,7 @@ export const api = {
     const response = await fetch(`${API_BASE_URL}${endpoint}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      credentials: 'include', // Include cookies for authentication
       body: JSON.stringify(data),
     });
     return handleResponse(response);
@@ -138,6 +148,7 @@ export const api = {
     const response = await fetch(`${API_BASE_URL}${endpoint}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
+      credentials: 'include', // Include cookies for authentication
       body: JSON.stringify(data),
     });
     return handleResponse(response);
@@ -151,6 +162,7 @@ export const api = {
   delete: async (endpoint) => {
     const response = await fetch(`${API_BASE_URL}${endpoint}`, {
       method: 'DELETE',
+      credentials: 'include', // Include cookies for authentication
     });
     return handleResponse(response);
   },
@@ -164,6 +176,7 @@ export const api = {
   upload: async (endpoint, formData) => {
     const response = await fetch(`${API_BASE_URL}${endpoint}`, {
       method: 'POST',
+      credentials: 'include', // Include cookies for authentication
       body: formData, // Don't set Content-Type, browser handles it with boundary
     });
     return handleResponse(response);
@@ -182,7 +195,9 @@ export const api = {
       ? `${API_BASE_URL}${endpoint}?${queryString}`
       : `${API_BASE_URL}${endpoint}`;
 
-    const response = await fetch(url);
+    const response = await fetch(url, {
+      credentials: 'include', // Include cookies for authentication
+    });
 
     if (!response.ok) {
       throw new ApiError(
