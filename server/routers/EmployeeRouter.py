@@ -19,7 +19,7 @@ from schemas.EmployeeSchemas import (
     EmployeeTeamAssign,
     EmployeeManagerAssign,
 )
-from core.dependencies import get_employee_service, require_roles, get_current_user, get_db, AnonymousUser
+from core.dependencies import get_employee_service, require_roles, get_db
 from sqlalchemy.orm import Session
 
 router = APIRouter(prefix="/employees", tags=["employees"])
