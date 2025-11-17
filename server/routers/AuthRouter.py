@@ -46,15 +46,18 @@ async def callback(code: str):
     frontend_url = os.getenv("FRONTEND_URL", "http://localhost:5173")
     redirect_response = RedirectResponse(url=f"{frontend_url}/dashboard")
 
+    # Check if running in production
+    is_production = os.getenv("ENVIRONMENT") == "production"
+
     # Set encrypted session cookie on the redirect response
     redirect_response.set_cookie(
         key="workos_session",
         value=auth_response.sealed_session,
-        path="/",            # Available across entire domain
-        httponly=True,       # Prevents JavaScript access (XSS protection)
-        secure=False,        # Set to True in production (HTTPS only), False for local dev
-        samesite="lax",      # CSRF protection
-        max_age=604800       # 7 days
+        path="/",
+        httponly=True,
+        secure=is_production,  # True in production (HTTPS), False in dev (HTTP localhost)
+        samesite="none" if is_production else "lax",  # "none" for cross-domain, "lax" for localhost
+        max_age=604800  # 7 days
     )
 
     return redirect_response
@@ -68,6 +71,9 @@ async def logout(request: Request):
     """
     sealed_session = request.cookies.get("workos_session")
     frontend_url = os.getenv("FRONTEND_URL", "http://localhost:5173")
+
+    # Check if running in production
+    is_production = os.getenv("ENVIRONMENT") == "production"
 
     if not sealed_session:
         # No session to logout, just redirect
@@ -85,14 +91,24 @@ async def logout(request: Request):
 
         # Clear cookie and redirect to WorkOS logout
         response = RedirectResponse(url=logout_url)
-        response.delete_cookie(key="workos_session", path="/")
+        response.delete_cookie(
+            key="workos_session",
+            path="/",
+            samesite="none" if is_production else "lax",
+            secure=is_production
+        )
         return response
 
     except Exception as e:
         # Fallback: clear cookie and redirect if session loading fails
         print(f"DEBUG: Logout fallback due to error: {e}")
         response = RedirectResponse(url=f"{frontend_url}/login")
-        response.delete_cookie(key="workos_session", path="/")
+        response.delete_cookie(
+            key="workos_session",
+            path="/",
+            samesite="none" if is_production else "lax",
+            secure=is_production
+        )
         return response
 
 
