@@ -3,7 +3,7 @@ load_dotenv()  # Load environment variables from .env file
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from routers import AuditLogRouter, GlobalSearchRouter, EmployeeRouter, DepartmentRouter, TeamRouter, ImportRouter, ExportRouter
+from routers import AuthRouter, AuditLogRouter, GlobalSearchRouter, EmployeeRouter, DepartmentRouter, TeamRouter, ImportRouter, ExportRouter
 
 
 app = FastAPI(
@@ -91,6 +91,7 @@ def health_check():
 
 
 # Register routers
+app.include_router(AuthRouter.router)
 app.include_router(AuditLogRouter.router)
 app.include_router(GlobalSearchRouter.router)
 app.include_router(EmployeeRouter.router)
