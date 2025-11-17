@@ -5,16 +5,17 @@ Welcome to the Human Resource Information System (HRIS). This guide will help yo
 ## Table of Contents
 
 1. [Getting Started](#getting-started)
-2. [Navigation](#navigation)
-3. [Employee Management](#employee-management)
-4. [Organizational Chart](#organizational-chart)
-5. [Departments & Teams](#departments--teams)
-6. [Bulk Import](#bulk-import)
-7. [Reports & Exports](#reports--exports)
-8. [Search](#search)
-9. [Audit Logs](#audit-logs)
-10. [Business Rules & Constraints](#business-rules--constraints)
-11. [Frequently Asked Questions](#frequently-asked-questions)
+2. [Authentication & Access](#authentication--access)
+3. [Navigation](#navigation)
+4. [Employee Management](#employee-management)
+5. [Organizational Chart](#organizational-chart)
+6. [Departments & Teams](#departments--teams)
+7. [Bulk Import](#bulk-import)
+8. [Reports & Exports](#reports--exports)
+9. [Search](#search)
+10. [Audit Logs](#audit-logs)
+11. [Business Rules & Constraints](#business-rules--constraints)
+12. [Frequently Asked Questions](#frequently-asked-questions)
 
 ---
 
@@ -34,6 +35,104 @@ The application uses a navigation header at the top with the following main sect
 - **Reports** - Export data in various formats
 - **Management** - Administrative operations
 - **Audits** - View system change history
+
+---
+
+## Authentication & Access
+
+### Logging In
+
+The HRIS system uses WorkOS AuthKit for secure authentication.
+
+**To access the application:**
+1. Navigate to the application URL in your web browser
+2. You'll be automatically redirected to the login page if not authenticated
+3. Click **"Sign In with WorkOS"**
+4. Enter your credentials on the WorkOS login page
+5. After successful authentication, you'll be redirected back to the application
+
+### User Roles & Permissions
+
+The system implements Role-Based Access Control (RBAC) with three permission levels:
+
+#### **Member** (Read-Only Access)
+- **Can view:**
+  - Employee directory and profiles
+  - Organizational chart
+  - Departments and teams
+  - Search functionality
+- **Cannot:**
+  - Create, edit, or delete any data
+  - Access management features
+  - View audit logs
+
+#### **HR** (Employee Management Access)
+- **All Member permissions, plus:**
+- **Can manage:**
+  - Create and edit employees
+  - Delete employees (except CEO)
+  - Create and manage departments
+  - Create and manage teams
+  - Bulk import employees
+  - Export data in all formats
+- **Cannot:**
+  - Promote employees to CEO
+  - Replace the CEO
+  - View audit logs
+
+#### **Admin** (Full System Access)
+- **All HR permissions, plus:**
+- **Can manage:**
+  - Promote employees to CEO
+  - Replace the CEO with a new employee
+  - Delete any employee (including former CEOs)
+  - View audit logs
+  - Full system administration
+
+### Viewing Your Profile
+
+To view your own employee profile (if linked to an employee record):
+1. Look for your name in the top-right corner of the header
+2. Click on your name
+3. Your employee profile modal will open
+4. If you don't have an employee record linked, you'll see a warning message
+
+### Logging Out
+
+To log out of the application:
+1. Click the **Logout** button in the top-right corner of the header
+2. You'll be redirected to the login page
+3. Your session will be cleared from both the application and WorkOS
+
+**Security Notes:**
+- Sessions expire after 7 days of inactivity
+- Your session is encrypted using secure HTTP-only cookies
+- Always log out when using a shared computer
+
+### User-Employee Linking
+
+**Automatic Linking:**
+- If an employee record exists with the same email as your user account, they will be automatically linked
+- This happens when you first log in or when an employee is created with your email
+
+**Benefits of Linking:**
+- Click your name in the header to view your employee profile
+- Your user actions are tracked in audit logs with your name
+- Managers can see their direct reports in their profile
+
+**If Not Linked:**
+- You can still use the system based on your role permissions
+- Clicking your name will show a message that no employee record exists
+- Your actions are still tracked in audit logs
+
+### Access Denied
+
+If you try to access a feature you don't have permission for, you'll see an "Access Denied" message showing your current role and the required role.
+
+**What to do:**
+- Contact your system administrator to request role upgrade if needed
+- Verify you're logged in with the correct account
+- Check that your user account has the appropriate role assigned in WorkOS
 
 ---
 
@@ -521,7 +620,7 @@ You can use multiple filters together (e.g., Engineering department + Active sta
 
 The audit log tracks all changes made in the system for accountability and compliance.
 
-**Note:** Viewing audit logs requires administrator access.
+**Note:** Viewing audit logs requires **Admin** role access. If you have Member or HR role, you will not be able to access the Audits page.
 
 ### What is Tracked
 
@@ -674,13 +773,36 @@ Understanding these rules will help you use the system effectively and avoid err
 
 ## Frequently Asked Questions
 
+### Authentication & Access
+
+**Q: I forgot my password. How do I reset it?**
+A: Use the "Forgot Password" link on the WorkOS login page, or contact your system administrator for assistance.
+
+**Q: Why can't I see certain features or buttons?**
+A: Features are restricted based on your role (Member, HR, or Admin). Contact your administrator if you need additional permissions.
+
+**Q: What's the difference between a User and an Employee?**
+A: A User is your login account for accessing the system. An Employee is a record in the employee database. They can be linked together by email, but you can have a User account without being an Employee, and vice versa.
+
+**Q: How do I link my user account to an employee record?**
+A: Linking happens automatically if an employee record exists with the same email as your user account. Contact your administrator if you think you should be linked but aren't.
+
+**Q: Can I view my own employee information?**
+A: Yes! If your user account is linked to an employee record, click your name in the top-right corner to view your profile.
+
+**Q: How long does my session last?**
+A: Sessions expire after 7 days of inactivity. You'll need to log in again after that.
+
 ### General Questions
 
 **Q: Can I undo a change I made?**
-A: The system does not have a built-in undo feature, but all changes are logged in the Audit Logs. You can view what changed and manually revert it if needed.
+A: The system does not have a built-in undo feature, but all changes are logged in the Audit Logs (for Admin users). You can view what changed and manually revert it if needed.
 
-**Q: Why can't I see certain features?**
-A: Some features require specific permissions (HR or Admin access). Check with your system administrator.
+**Q: What roles are required for different actions?**
+A:
+- **Member**: View-only access
+- **HR**: Create/edit employees, departments, teams, import/export
+- **Admin**: All HR permissions plus CEO management and audit log access
 
 **Q: Can I export a partial organizational chart?**
 A: Yes, use the filters when exporting to limit the data to a specific department, team, or employee status.
@@ -821,6 +943,18 @@ For technical issues, feature requests, or questions not covered in this guide, 
 ---
 
 ## Glossary
+
+**User** - A login account for accessing the HRIS system, authenticated via WorkOS
+
+**Role** - Permission level assigned to a user (Admin, HR, or Member)
+
+**Admin** - User role with full system access including CEO management and audit logs
+
+**HR** - User role with employee management access (cannot manage CEO or view audit logs)
+
+**Member** - User role with read-only access to view employees and organizational data
+
+**User-Employee Linking** - Automatic association between a user account and employee record when emails match
 
 **CEO** - Chief Executive Officer, the top employee in the organization with no manager
 

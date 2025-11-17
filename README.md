@@ -28,6 +28,16 @@ A comprehensive Human Resource Information System (HRIS) built with modern web t
 - 📈 **Reports** - View organizational insights and metrics
 - ✅ **Data Validation** - Prevent circular hierarchies and enforce business rules
 
+### Authentication & Authorization
+- 🔐 **WorkOS AuthKit Integration** - Enterprise-grade authentication
+- 👥 **Role-Based Access Control (RBAC)** - Three permission levels
+  - **Admin** - Full system access (create/edit/delete employees, manage CEO role)
+  - **HR** - Employee management access (cannot promote/replace CEO)
+  - **Member** - Read-only access to view employees and org structure
+- 🔒 **Secure Session Management** - Encrypted HTTP-only cookies
+- 🔗 **Automatic User-Employee Linking** - Auto-link users to employee records by email
+- 🚪 **Seamless Login/Logout** - Single sign-on with WorkOS AuthKit
+
 ## Tech Stack
 
 ### Backend
@@ -36,6 +46,7 @@ A comprehensive Human Resource Information System (HRIS) built with modern web t
 - **PostgreSQL** - Relational database
 - **Alembic** - Database migration tool
 - **Pydantic** - Data validation using Python type annotations
+- **WorkOS** - Authentication and user management
 - **Pytest** - Testing framework
 
 ### Frontend
@@ -52,6 +63,7 @@ A comprehensive Human Resource Information System (HRIS) built with modern web t
 - **PostgreSQL 12+** - Database
 - **pip** - Python package manager
 - **npm** - Node package manager
+- **WorkOS Account** - For authentication (free tier available at [workos.com](https://workos.com))
 
 ## Installation
 
@@ -61,7 +73,41 @@ git clone https://github.com/rubenrekhi/hris-system
 cd hris-system
 ```
 
-### 2. Backend Setup
+### 2. WorkOS Setup
+
+1. **Create a WorkOS account** at [dashboard.workos.com](https://dashboard.workos.com)
+
+2. **Set up AuthKit:**
+   - In the WorkOS Dashboard, go to **Authentication** → **Set up AuthKit**
+   - Follow the setup wizard
+
+3. **Create an organization:**
+   - Go to **Organizations** → **Create Organization**
+   - Name it (e.g., "hris-system")
+   - Note the **Organization ID** (starts with `org_`)
+
+4. **Create roles:**
+   - Go to **Roles** → **Create Role**
+   - Create three roles:
+     - `admin` - Full system access
+     - `hr` - Employee management access
+     - `member` - Read-only access
+
+5. **Configure redirect URIs:**
+   - Go to **Redirects** section
+   - Add callback redirect: `http://localhost:8000/auth/callback`
+   - Add logout redirect: `http://localhost:5173/login`
+
+6. **Get your credentials:**
+   - Go to **API Keys** to find your:
+     - **API Key** (starts with `sk_`)
+     - **Client ID** (starts with `client_`)
+   - Generate a **Cookie Password**:
+     ```bash
+     openssl rand -base64 24
+     ```
+
+### 3. Backend Setup
 
 ```bash
 # Navigate to server directory
@@ -74,9 +120,15 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 # Install dependencies
 pip install -r requirements.txt
 
-# Create .env file
+# Create .env file with your WorkOS credentials
 cat > .env << EOF
 DATABASE_URL=postgresql://username:password@localhost:5432/hris_db
+WORKOS_API_KEY=sk_your_api_key_here
+WORKOS_CLIENT_ID=client_your_client_id_here
+WORKOS_REDIRECT_URI=http://localhost:8000/auth/callback
+WORKOS_ORG_ID=org_your_org_id_here
+WORKOS_COOKIE_PASSWORD=your_generated_cookie_password_here
+FRONTEND_URL=http://localhost:5173
 EOF
 
 # Run database migrations
@@ -160,6 +212,14 @@ hris-system/
 ```
 
 ## Key API Endpoints
+
+**Note:** All endpoints (except `/auth/login` and health checks) require authentication via WorkOS session cookie.
+
+### Authentication
+- `GET /auth/login` - Redirect to WorkOS login
+- `GET /auth/callback` - Handle OAuth callback (auto-redirect)
+- `GET /auth/logout` - Log out and clear session
+- `GET /auth/me` - Get current user information
 
 ### Employees
 - `GET /employees` - List all employees with filtering
@@ -265,6 +325,69 @@ cd client
 npm run build
 npm run preview  # Preview production build
 ```
+
+## Production Deployment
+
+### Environment Configuration
+
+When deploying to production (e.g., Vercel, Heroku, AWS), you must set the `ENVIRONMENT` variable to enable production-mode security settings:
+
+**Backend environment variables:**
+```bash
+# Required for all deployments
+DATABASE_URL=postgresql://user:password@host:5432/database_name
+WORKOS_API_KEY=sk_your_production_api_key
+WORKOS_CLIENT_ID=client_your_production_client_id
+WORKOS_ORG_ID=org_your_production_org_id
+WORKOS_COOKIE_PASSWORD=your_production_cookie_password
+
+# Production-specific
+ENVIRONMENT=production  # CRITICAL: Enables HTTPS-only cookies and cross-domain support
+WORKOS_REDIRECT_URI=https://your-backend-domain.com/auth/callback
+FRONTEND_URL=https://your-frontend-domain.com
+```
+
+**Frontend environment variables:**
+```bash
+VITE_API_URL=https://your-backend-domain.com
+```
+
+### Cross-Domain Deployment
+
+If your frontend and backend are deployed on **different domains** (e.g., frontend on `app.example.com`, backend on `api.example.com`), the `ENVIRONMENT=production` setting is **required** to enable secure cross-domain cookies.
+
+**What happens with `ENVIRONMENT=production`:**
+- Cookies use `secure=true` (requires HTTPS)
+- Cookies use `samesite=none` (allows cross-domain)
+- Both settings are necessary for authentication to work across different domains
+
+**Without this setting:**
+- Cookies will use `secure=false` and `samesite=lax` (localhost defaults)
+- Authentication will fail in production with redirect loops
+- Session cookies won't persist across domains
+
+### WorkOS Production Configuration
+
+Update your WorkOS Dashboard settings for production:
+
+1. **Redirect URIs:**
+   - Add production callback: `https://your-backend-domain.com/auth/callback`
+   - Add production logout: `https://your-frontend-domain.com/login`
+
+2. **CORS Origins:**
+   - Ensure your backend's CORS configuration includes your production frontend URL
+   - Update `server/app.py` if needed:
+   ```python
+   origins = [
+       "http://localhost:5173",  # local dev
+       "https://your-frontend-domain.com",  # production
+   ]
+   ```
+
+3. **Environment Variables:**
+   - Use production API keys (not test keys)
+   - Generate a new `WORKOS_COOKIE_PASSWORD` for production
+   - Never commit production secrets to version control
 
 ## Database Schema
 
@@ -373,16 +496,40 @@ This application follows a **layered architecture** pattern:
 ## Environment Variables
 
 ### Backend (`server/.env`)
-```
+```bash
+# Database
 DATABASE_URL=postgresql://user:password@localhost:5432/database_name
+
+# WorkOS Authentication
+WORKOS_API_KEY=sk_your_api_key          # From WorkOS Dashboard → API Keys
+WORKOS_CLIENT_ID=client_your_client_id  # From WorkOS Dashboard → API Keys
+WORKOS_REDIRECT_URI=http://localhost:8000/auth/callback
+WORKOS_ORG_ID=org_your_org_id           # From WorkOS Dashboard → Organizations
+WORKOS_COOKIE_PASSWORD=your_password    # Generate with: openssl rand -base64 24
+FRONTEND_URL=http://localhost:5173
+
+# Optional: Set to "production" when deploying (enables HTTPS cookies and cross-domain support)
+# ENVIRONMENT=production
 ```
 
 ### Frontend (`client/.env`)
-```
+```bash
 VITE_API_URL=http://localhost:8000
 ```
 
 ## Troubleshooting
+
+### Authentication Issues
+- **401 Unauthorized errors:**
+  - Ensure you're logged in at `http://localhost:8000/auth/login`
+  - Check that WorkOS credentials in `.env` are correct
+  - Verify cookie is being set (check browser DevTools → Application → Cookies)
+- **Redirect loop:**
+  - Verify `WORKOS_REDIRECT_URI` matches WorkOS Dashboard redirect URI
+  - Check `FRONTEND_URL` in `.env` is correct
+- **Cannot assign roles to users:**
+  - In WorkOS Dashboard → Users, click on user
+  - Assign role (admin, hr, or member) to the user
 
 ### Database Connection Issues
 - Ensure PostgreSQL is running
