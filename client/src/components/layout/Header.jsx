@@ -13,7 +13,10 @@ import {
   ListItemIcon,
   ListItemText,
   useTheme,
-  useMediaQuery
+  useMediaQuery,
+  Chip,
+  Snackbar,
+  Alert
 } from '@mui/material';
 import { Link, useLocation } from 'react-router-dom';
 import MenuIcon from '@mui/icons-material/Menu';
@@ -24,8 +27,12 @@ import AssignmentIcon from '@mui/icons-material/Assignment';
 import BusinessIcon from '@mui/icons-material/Business';
 import BarChartIcon from '@mui/icons-material/BarChart';
 import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
+import LogoutIcon from '@mui/icons-material/Logout';
 import { cache } from '@/utils/cache';
 import { departmentService, teamService, employeeService, auditLogService } from '@/services';
+import { useAuth } from '@/hooks/useAuth';
+import DetailModal from '@/components/common/DetailModal';
+import EmployeeDetail from '@/components/employees/EmployeeDetail';
 
 /**
  * Header component with top navigation bar.
@@ -37,6 +44,22 @@ export default function Header() {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const { user, logout } = useAuth();
+
+  // Employee profile modal state
+  const [selectedEmployeeId, setSelectedEmployeeId] = useState(null);
+  const [showWarning, setShowWarning] = useState(false);
+
+  /**
+   * Handle clicking on user name to view their employee profile
+   */
+  const handleNameClick = () => {
+    if (user?.employee_id) {
+      setSelectedEmployeeId(user.employee_id);
+    } else {
+      setShowWarning(true);
+    }
+  };
 
   const navItems = [
     { label: 'Home', path: '/', icon: <HomeIcon /> },
@@ -163,6 +186,55 @@ export default function Header() {
               );
             })}
           </Box>
+
+          {/* User Info and Logout - Desktop and Mobile */}
+          {user && (
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+              {/* User Name - Desktop Only */}
+              <Typography
+                variant="body2"
+                onClick={handleNameClick}
+                sx={{
+                  display: { xs: 'none', md: 'block' },
+                  color: 'text.secondary',
+                  cursor: 'pointer',
+                  '&:hover': {
+                    color: 'primary.main',
+                    textDecoration: 'underline',
+                  },
+                }}
+              >
+                {user.name}
+              </Typography>
+
+              {/* Role Badge */}
+              <Chip
+                label={user.role || 'member'}
+                size="small"
+                color={user.role === 'admin' ? 'error' : user.role === 'hr' ? 'warning' : 'default'}
+                sx={{ textTransform: 'uppercase', fontWeight: 600 }}
+              />
+
+              {/* Logout Button */}
+              <Button
+                variant="outlined"
+                size="small"
+                startIcon={<LogoutIcon />}
+                onClick={logout}
+                sx={{
+                  borderColor: 'rgba(255, 255, 255, 0.23)',
+                  color: 'text.secondary',
+                  '&:hover': {
+                    borderColor: 'error.main',
+                    color: 'error.main',
+                    backgroundColor: 'rgba(211, 47, 47, 0.04)',
+                  },
+                }}
+              >
+                Logout
+              </Button>
+            </Box>
+          )}
         </Toolbar>
       </AppBar>
 
@@ -230,6 +302,34 @@ export default function Header() {
           </List>
         </Box>
       </Drawer>
+
+      {/* Employee Profile Modal */}
+      {selectedEmployeeId && (
+        <DetailModal
+          open={!!selectedEmployeeId}
+          onClose={() => setSelectedEmployeeId(null)}
+          title="My Employee Profile"
+          maxWidth="md"
+        >
+          <EmployeeDetail employeeId={selectedEmployeeId} />
+        </DetailModal>
+      )}
+
+      {/* Warning Snackbar for users without employee record */}
+      <Snackbar
+        open={showWarning}
+        autoHideDuration={6000}
+        onClose={() => setShowWarning(false)}
+        anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
+      >
+        <Alert
+          onClose={() => setShowWarning(false)}
+          severity="warning"
+          sx={{ width: '100%' }}
+        >
+          No employee record is associated with your account.
+        </Alert>
+      </Snackbar>
     </>
   );
 }
