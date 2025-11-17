@@ -107,5 +107,6 @@ async def get_current_user_info(user = Depends(get_current_user)):
         "email": user.email,
         "name": user.name,
         "role": user.role,
-        "organization_id": user.organization_id
+        "organization_id": user.organization_id,
+        "employee_id": str(user.employee_id) if user.employee_id else None
     }

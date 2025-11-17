@@ -31,7 +31,8 @@ class AuthenticatedUser:
         email: str,
         name: str,
         organization_id: str = None,
-        role: str = None
+        role: str = None,
+        employee_id: UUID = None
     ):
         self.id = id
         self.workos_user_id = workos_user_id
@@ -39,6 +40,7 @@ class AuthenticatedUser:
         self.name = name
         self.organization_id = organization_id
         self.role = role  # "admin", "hr", or "member"
+        self.employee_id = employee_id
 
 
 
@@ -117,7 +119,8 @@ async def get_current_user(
             email=workos_user.email,
             name=f"{workos_user.first_name or ''} {workos_user.last_name or ''}".strip() or workos_user.email,
             organization_id=organization_id,
-            role=role
+            role=role,
+            employee_id=db_user.employee_id
         )
 
     except HTTPException:
