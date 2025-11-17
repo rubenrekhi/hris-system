@@ -23,7 +23,7 @@ from sqlalchemy.pool import StaticPool
 from app import app
 from models.BaseModel import Base
 from models.AuditLogModel import AuditLog, EntityType, ChangeType
-from core.dependencies import get_db
+from core.dependencies import get_db, get_current_user
 
 # Import all models to ensure they're registered with SQLAlchemy
 # This is needed because app.py imports routes that reference these models
@@ -61,10 +61,10 @@ def test_db_session(test_db_engine):
 
 
 @pytest.fixture(scope="function")
-def client(test_db_session):
+def client(test_db_session, test_admin_user):
     """
     Create a FastAPI TestClient with dependency override.
-    Injects test database session into all endpoints.
+    Injects test database session and mock admin user into all endpoints.
     """
     def override_get_db():
         try:
@@ -72,7 +72,11 @@ def client(test_db_session):
         finally:
             pass  # Session cleanup handled by test_db_session fixture
 
+    async def override_get_current_user():
+        return test_admin_user
+
     app.dependency_overrides[get_db] = override_get_db
+    app.dependency_overrides[get_current_user] = override_get_current_user
 
     with TestClient(app) as test_client:
         yield test_client

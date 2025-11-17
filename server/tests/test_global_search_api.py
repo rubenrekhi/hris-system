@@ -24,7 +24,7 @@ from models.EmployeeModel import Employee, EmployeeStatus
 from models.DepartmentModel import Department
 from models.TeamModel import Team
 from models.UserModel import User
-from core.dependencies import get_db
+from core.dependencies import get_db, get_current_user
 
 
 @pytest.fixture(scope="function")
@@ -55,10 +55,10 @@ def test_db_session(test_db_engine):
 
 
 @pytest.fixture(scope="function")
-def client(test_db_session):
+def client(test_db_session, test_admin_user):
     """
     Create a FastAPI TestClient with dependency override.
-    Injects test database session into all endpoints.
+    Injects test database session and mock admin user into all endpoints.
     """
     def override_get_db():
         try:
@@ -66,7 +66,11 @@ def client(test_db_session):
         finally:
             pass  # Session cleanup handled by test_db_session fixture
 
+    async def override_get_current_user():
+        return test_admin_user
+
     app.dependency_overrides[get_db] = override_get_db
+    app.dependency_overrides[get_current_user] = override_get_current_user
 
     with TestClient(app) as test_client:
         yield test_client
